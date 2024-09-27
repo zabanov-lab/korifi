@@ -29,7 +29,7 @@ import (
 	"code.cloudfoundry.org/korifi/controllers/config"
 	"code.cloudfoundry.org/korifi/controllers/controllers/networking/domains"
 	"code.cloudfoundry.org/korifi/controllers/controllers/networking/routes"
-	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings"
+	upsibindings "code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/brokers"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/instances/managed"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/instances/upsi"
@@ -237,7 +237,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err = (bindings.NewReconciler(
+		if err = (upsibindings.NewReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			controllersLog,

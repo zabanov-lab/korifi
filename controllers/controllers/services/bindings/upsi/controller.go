@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bindings
+package upsi
 
 import (
 	"context"
@@ -134,15 +134,19 @@ func (r *Reconciler) appToServiceBindings(ctx context.Context, o client.Object) 
 func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceBinding *korifiv1alpha1.CFServiceBinding) (ctrl.Result, error) {
 	log := logr.FromContextOrDiscard(ctx)
 
-	cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
-	log.V(1).Info("set observed generation", "generation", cfServiceBinding.Status.ObservedGeneration)
-
 	cfServiceInstance := new(korifiv1alpha1.CFServiceInstance)
 	err := r.k8sClient.Get(ctx, types.NamespacedName{Name: cfServiceBinding.Spec.Service.Name, Namespace: cfServiceBinding.Namespace}, cfServiceInstance)
 	if err != nil {
 		log.Info("service instance not found", "service-instance", cfServiceBinding.Spec.Service.Name, "error", err)
 		return ctrl.Result{}, err
 	}
+
+	if cfServiceInstance.Spec.Type != korifiv1alpha1.UserProvidedType {
+		return ctrl.Result{}, nil
+	}
+
+	cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
+	log.V(1).Info("set observed generation", "generation", cfServiceBinding.Status.ObservedGeneration)
 
 	err = controllerutil.SetOwnerReference(cfServiceInstance, cfServiceBinding, r.scheme)
 	if err != nil {
