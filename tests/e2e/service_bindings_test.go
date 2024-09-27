@@ -22,7 +22,7 @@ var _ = Describe("Service Bindings", func() {
 	BeforeEach(func() {
 		spaceGUID = createSpace(generateGUID("space1"), commonTestOrgGUID)
 		appGUID = createBuildpackApp(spaceGUID, generateGUID("app"))
-		instanceGUID = createServiceInstance(spaceGUID, generateGUID("service-instance"), nil)
+		instanceGUID = createUserProvidedServiceInstance(spaceGUID, generateGUID("service-instance"), nil)
 	})
 
 	AfterEach(func() {
@@ -44,6 +44,33 @@ var _ = Describe("Service Bindings", func() {
 		It("succeeds", func() {
 			Expect(httpError).NotTo(HaveOccurred())
 			Expect(httpResp).To(HaveRestyStatusCode(http.StatusCreated))
+		})
+
+		FWhen("the service instance is managed", func() {
+			BeforeEach(func() {
+				brokerGUID := createBroker(serviceBrokerURL)
+				DeferCleanup(func() {
+					cleanupBroker(brokerGUID)
+				})
+				instanceGUID = createManagedServiceInstance(brokerGUID, spaceGUID)
+			})
+
+			It("succeeds with a job redirect", func() {
+				Expect(httpError).NotTo(HaveOccurred())
+				Expect(httpResp).To(HaveRestyStatusCode(http.StatusAccepted))
+
+				Expect(httpResp).To(SatisfyAll(
+					HaveRestyStatusCode(http.StatusAccepted),
+					HaveRestyHeaderWithValue("Location", ContainSubstring("/v3/jobs/managed_service_binding.create~")),
+				))
+
+				jobURL := httpResp.Header().Get("Location")
+				Eventually(func(g Gomega) {
+					jobResp, err := adminClient.R().Get(jobURL)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(string(jobResp.Body())).To(ContainSubstring("COMPLETE"))
+				}).Should(Succeed())
+			})
 		})
 	})
 
@@ -91,7 +118,7 @@ var _ = Describe("Service Bindings", func() {
 		BeforeEach(func() {
 			bindingGUID = createServiceBinding(appGUID, instanceGUID, "")
 
-			anotherInstanceGUID = createServiceInstance(spaceGUID, generateGUID("another-service-instance"), nil)
+			anotherInstanceGUID = createUserProvidedServiceInstance(spaceGUID, generateGUID("another-service-instance"), nil)
 			anotherBindingGUID = createServiceBinding(appGUID, anotherInstanceGUID, "")
 
 			result = resourceListWithInclusion{}

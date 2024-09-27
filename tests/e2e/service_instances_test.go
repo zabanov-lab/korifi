@@ -2,10 +2,8 @@ package e2e_test
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
@@ -23,7 +21,7 @@ var _ = Describe("Service Instances", func() {
 	BeforeEach(func() {
 		spaceGUID = createSpace(generateGUID("space1"), commonTestOrgGUID)
 		upsiName = generateGUID("service-instance")
-		upsiGUID = createServiceInstance(spaceGUID, upsiName, nil)
+		upsiGUID = createUserProvidedServiceInstance(spaceGUID, upsiName, nil)
 	})
 
 	AfterEach(func() {
@@ -224,7 +222,7 @@ var _ = Describe("Service Instances", func() {
 
 		BeforeEach(func() {
 			anotherSpaceGUID = createSpace(generateGUID("space1"), commonTestOrgGUID)
-			anotherInstanceGUID = createServiceInstance(anotherSpaceGUID, generateGUID("service-instance"), nil)
+			anotherInstanceGUID = createUserProvidedServiceInstance(anotherSpaceGUID, generateGUID("service-instance"), nil)
 		})
 
 		JustBeforeEach(func() {
@@ -246,52 +244,3 @@ var _ = Describe("Service Instances", func() {
 		})
 	})
 })
-
-func createManagedServiceInstance(brokerGUID, spaceGUID string) string {
-	GinkgoHelper()
-
-	var plansResp resourceList[resource]
-	catalogResp, err := adminClient.R().SetResult(&plansResp).Get("/v3/service_plans?service_broker_guids=" + brokerGUID)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(catalogResp).To(HaveRestyStatusCode(http.StatusOK))
-	Expect(plansResp.Resources).NotTo(BeEmpty())
-
-	createPayload := serviceInstanceResource{
-		resource: resource{
-			Name: uuid.NewString(),
-			Relationships: relationships{
-				"space": {
-					Data: resource{
-						GUID: spaceGUID,
-					},
-				},
-				"service_plan": {
-					Data: resource{
-						GUID: plansResp.Resources[0].GUID,
-					},
-				},
-			},
-		},
-		InstanceType: "managed",
-	}
-
-	var result serviceInstanceResource
-	httpResp, httpError := adminClient.R().
-		SetBody(createPayload).
-		SetResult(&result).
-		Post("/v3/service_instances")
-	Expect(httpError).NotTo(HaveOccurred())
-	Expect(httpResp).To(SatisfyAll(
-		HaveRestyStatusCode(http.StatusAccepted),
-		HaveRestyHeaderWithValue("Location", ContainSubstring("/v3/jobs/managed_service_instance.create~")),
-	))
-
-	jobURL := httpResp.Header().Get("Location")
-	Eventually(func(g Gomega) {
-		jobResp, err := adminClient.R().Get(jobURL)
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(string(jobResp.Body())).To(ContainSubstring("COMPLETE"))
-	}).Should(Succeed())
-
-	return strings.Split(jobURL, "~")[1]
-}
