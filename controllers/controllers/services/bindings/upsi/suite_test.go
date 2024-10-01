@@ -24,6 +24,7 @@ import (
 
 	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/credentials"
 	"code.cloudfoundry.org/korifi/controllers/controllers/shared"
 	"code.cloudfoundry.org/korifi/tests/helpers"
 
@@ -90,6 +91,7 @@ var _ = BeforeEach(func() {
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
 		ctrl.Log.WithName("controllers").WithName("CFServiceBinding"),
+		credentials.NewCredentialsReconciler(k8sManager.GetClient(), ctrl.Log.WithName("controllers").WithName("CFServiceBinding"), k8sManager.GetScheme()),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 })
