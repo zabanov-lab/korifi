@@ -1,11 +1,11 @@
-package upsi_test
+package bindings_test
 
 import (
 	"encoding/json"
 	"fmt"
 
 	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
-	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings"
 	"code.cloudfoundry.org/korifi/tools"
 	"code.cloudfoundry.org/korifi/tools/k8s"
 
@@ -177,9 +177,9 @@ var _ = Describe("CFServiceBinding", func() {
 			g.Expect(sbServiceBinding.Spec.Provider).To(BeEmpty())
 
 			g.Expect(sbServiceBinding.Labels).To(SatisfyAll(
-				HaveKeyWithValue(upsi.ServiceBindingGUIDLabel, binding.Name),
+				HaveKeyWithValue(bindings.ServiceBindingGUIDLabel, binding.Name),
 				HaveKeyWithValue(korifiv1alpha1.CFAppGUIDLabelKey, cfApp.Name),
-				HaveKeyWithValue(upsi.ServiceCredentialBindingTypeLabel, "app"),
+				HaveKeyWithValue(bindings.ServiceCredentialBindingTypeLabel, "app"),
 			))
 
 			g.Expect(sbServiceBinding.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{

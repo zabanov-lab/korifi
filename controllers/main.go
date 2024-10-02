@@ -29,11 +29,11 @@ import (
 	"code.cloudfoundry.org/korifi/controllers/config"
 	"code.cloudfoundry.org/korifi/controllers/controllers/networking/domains"
 	"code.cloudfoundry.org/korifi/controllers/controllers/networking/routes"
-	upsibindings "code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings"
+	upsi_bindings "code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/brokers"
-	"code.cloudfoundry.org/korifi/controllers/controllers/services/credentials"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/instances/managed"
-	"code.cloudfoundry.org/korifi/controllers/controllers/services/instances/upsi"
+	upsi_instances "code.cloudfoundry.org/korifi/controllers/controllers/services/instances/upsi"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/osbapi"
 	"code.cloudfoundry.org/korifi/controllers/controllers/shared"
 	"code.cloudfoundry.org/korifi/controllers/controllers/workloads/apps"
@@ -229,7 +229,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err = (upsi.NewReconciler(
+		if err = (upsi_instances.NewReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			controllersLog,
@@ -238,11 +238,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err = (upsibindings.NewReconciler(
+		if err = (bindings.NewReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			controllersLog,
-			credentials.NewCredentialsReconciler(mgr.GetClient(), ctrl.Log.WithName("controllers").WithName("CFServiceBinding"), mgr.GetScheme()),
+			upsi_bindings.NewReconciler(mgr.GetClient(), mgr.GetScheme()),
 		)).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "CFServiceBinding")
 			os.Exit(1)

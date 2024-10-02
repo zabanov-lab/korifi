@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package upsi_test
+package bindings_test
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"time"
 
 	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
-	"code.cloudfoundry.org/korifi/controllers/controllers/services/credentials"
 	"code.cloudfoundry.org/korifi/controllers/controllers/shared"
 	"code.cloudfoundry.org/korifi/tests/helpers"
 
@@ -64,8 +64,8 @@ var _ = BeforeSuite(func() {
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "..", "..", "helm", "korifi", "controllers", "crds"),
-			filepath.Join("..", "..", "..", "..", "..", "tests", "vendor", "service-binding"),
+			filepath.Join("..", "..", "..", "..", "helm", "korifi", "controllers", "crds"),
+			filepath.Join("..", "..", "..", "..", "tests", "vendor", "service-binding"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
@@ -87,11 +87,11 @@ var _ = BeforeEach(func() {
 
 	adminClient, stopClientCache = helpers.NewCachedClient(testEnv.Config)
 
-	err := upsi.NewReconciler(
+	err := bindings.NewReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
 		ctrl.Log.WithName("controllers").WithName("CFServiceBinding"),
-		credentials.NewCredentialsReconciler(k8sManager.GetClient(), ctrl.Log.WithName("controllers").WithName("CFServiceBinding"), k8sManager.GetScheme()),
+		upsi.NewReconciler(k8sManager.GetClient(), k8sManager.GetScheme()),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 })
