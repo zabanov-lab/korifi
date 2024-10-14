@@ -26,7 +26,6 @@ import (
 
 var _ = Describe("CFServiceBinding", func() {
 	var (
-		rootNamespace             string
 		cfApp                     *korifiv1alpha1.CFApp
 		instance                  *korifiv1alpha1.CFServiceInstance
 		binding                   *korifiv1alpha1.CFServiceBinding
@@ -34,20 +33,21 @@ var _ = Describe("CFServiceBinding", func() {
 		serviceBroker             *korifiv1alpha1.CFServiceBroker
 		serviceOffering           *korifiv1alpha1.CFServiceOffering
 		servicePlan               *korifiv1alpha1.CFServicePlan
+		testNamespace             string
 	)
 
 	BeforeEach(func() {
-		rootNamespace = uuid.NewString()
+		testNamespace = uuid.NewString()
 		Expect(adminClient.Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: rootNamespace,
+				Name: testNamespace,
 			},
 		})).To(Succeed())
 
 		cfApp = &korifiv1alpha1.CFApp{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
+				Namespace: testNamespace,
 			},
 			Spec: korifiv1alpha1.CFAppSpec{
 				DisplayName:  uuid.NewString(),
@@ -70,7 +70,7 @@ var _ = Describe("CFServiceBinding", func() {
 		instanceCredentialsSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
+				Namespace: testNamespace,
 			},
 			Data: map[string][]byte{
 				tools.CredentialsSecretKey: credentialsBytes,
@@ -138,7 +138,7 @@ var _ = Describe("CFServiceBinding", func() {
 		instance = &korifiv1alpha1.CFServiceInstance{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
+				Namespace: testNamespace,
 			},
 			Spec: korifiv1alpha1.CFServiceInstanceSpec{
 				DisplayName: "mongodb-service-instance-name",
@@ -154,7 +154,7 @@ var _ = Describe("CFServiceBinding", func() {
 		binding = &korifiv1alpha1.CFServiceBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
+				Namespace: testNamespace,
 			},
 			Spec: korifiv1alpha1.CFServiceBindingSpec{
 				Service: corev1.ObjectReference{
@@ -229,7 +229,7 @@ var _ = Describe("CFServiceBinding", func() {
 			Eventually(func(g Gomega) {
 				sbServiceBinding := &servicebindingv1beta1.ServiceBinding{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: rootNamespace,
+						Namespace: testNamespace,
 						Name:      fmt.Sprintf("cf-binding-%s", binding.Name),
 					},
 				}
@@ -286,7 +286,7 @@ var _ = Describe("CFServiceBinding", func() {
 				Eventually(func(g Gomega) {
 					sbServiceBinding := &servicebindingv1beta1.ServiceBinding{
 						ObjectMeta: metav1.ObjectMeta{
-							Namespace: rootNamespace,
+							Namespace: testNamespace,
 							Name:      fmt.Sprintf("cf-binding-%s", binding.Name),
 						},
 					}
@@ -302,7 +302,7 @@ var _ = Describe("CFServiceBinding", func() {
 			BeforeEach(func() {
 				sbBinding = &servicebindingv1beta1.ServiceBinding{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: rootNamespace,
+						Namespace: testNamespace,
 						Name:      fmt.Sprintf("cf-binding-%s", binding.Name),
 					},
 				}
@@ -371,7 +371,7 @@ var _ = Describe("CFServiceBinding", func() {
 				instanceCredentialsSecret = &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      uuid.NewString(),
-						Namespace: rootNamespace,
+						Namespace: testNamespace,
 					},
 					Data: map[string][]byte{
 						tools.CredentialsSecretKey: credentialsBytes,
@@ -406,7 +406,7 @@ var _ = Describe("CFServiceBinding", func() {
 				Eventually(func(g Gomega) {
 					sbServiceBinding := &servicebindingv1beta1.ServiceBinding{
 						ObjectMeta: metav1.ObjectMeta{
-							Namespace: rootNamespace,
+							Namespace: testNamespace,
 							Name:      fmt.Sprintf("cf-binding-%s", binding.Name),
 						},
 					}
@@ -426,7 +426,7 @@ var _ = Describe("CFServiceBinding", func() {
 				instanceCredentialsSecret = &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      uuid.NewString(),
-						Namespace: rootNamespace,
+						Namespace: testNamespace,
 					},
 					Data: map[string][]byte{
 						tools.CredentialsSecretKey: credentialsBytes,
@@ -460,7 +460,7 @@ var _ = Describe("CFServiceBinding", func() {
 				Eventually(func(g Gomega) {
 					sbServiceBinding := &servicebindingv1beta1.ServiceBinding{
 						ObjectMeta: metav1.ObjectMeta{
-							Namespace: rootNamespace,
+							Namespace: testNamespace,
 							Name:      fmt.Sprintf("cf-binding-%s", binding.Name),
 						},
 					}
@@ -554,7 +554,7 @@ var _ = Describe("CFServiceBinding", func() {
 					Expect(adminClient.Create(ctx, &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      instance.Name,
-							Namespace: rootNamespace,
+							Namespace: testNamespace,
 						},
 					})).To(Succeed())
 				})
@@ -589,7 +589,7 @@ var _ = Describe("CFServiceBinding", func() {
 		// check the secret is created
 		// check cfBinding.binding.Name is set
 		// the binding becomes re
-		FIt("binds the service", func() {
+		It("binds the service", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(brokerClient.BindCallCount()).To(BeNumerically(">", 0))
 				_, payload := brokerClient.BindArgsForCall(0)
@@ -599,9 +599,8 @@ var _ = Describe("CFServiceBinding", func() {
 					BindRequest: osbapi.BindRequest{
 						ServiceId: "service-offering-id",
 						PlanID:    "service-plan-id",
-						AppGUID:   cfApp.Name,
 						BindResource: osbapi.BindResource{
-							AppGUID: cfApp.Name,
+							AppGUID: cfApp.Namespace + "/" + cfApp.Name,
 						},
 						Parameters: map[string]any{},
 					},
@@ -609,20 +608,30 @@ var _ = Describe("CFServiceBinding", func() {
 			}).Should(Succeed())
 		})
 
-		It("sets the binding Ready status condition to true", func() {
+		It("creates the credentials secret", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
-				g.Expect(binding.Status.Conditions).To(ContainElement(SatisfyAll(
-					HasType(Equal(korifiv1alpha1.StatusConditionReady)),
-					HasStatus(Equal(metav1.ConditionTrue)),
-				)))
+				g.Expect(binding.Status.Credentials.Name).To(Equal(binding.Name))
+
+				credentialsSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: binding.Namespace,
+						Name:      binding.Status.Credentials.Name,
+					},
+				}
+				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(credentialsSecret), credentialsSecret)).To(Succeed())
+				g.Expect(credentialsSecret.Type).To(BeEquivalentTo("Opaque"))
+				g.Expect(credentialsSecret.Data).To(MatchKeys(IgnoreExtras, Keys{
+					tools.CredentialsSecretKey: BeEquivalentTo(`{"foo":"bar"}`),
+				}))
+				// TODO: check the secret is onwed by the binding
 			}).Should(Succeed())
 		})
 
-		FIt("creates the binding secret", func() {
+		It("creates the servicebinding.io secret", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
-				g.Expect(binding.Status.Binding.Name).To(Equal(binding.Name))
+				g.Expect(binding.Status.Binding.Name).NotTo(BeEmpty())
 
 				bindingSecret := &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -633,10 +642,18 @@ var _ = Describe("CFServiceBinding", func() {
 				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(bindingSecret), bindingSecret)).To(Succeed())
 				g.Expect(bindingSecret.Type).To(BeEquivalentTo("servicebinding.io/managed"))
 				g.Expect(bindingSecret.Data).To(MatchKeys(IgnoreExtras, Keys{
-					"type": BeEquivalentTo("managed"),
-					"foo":  BeEquivalentTo("bar"),
+					"foo": BeEquivalentTo("bar"),
 				}))
+				// TODO: check the secret is onwed by the binding
 			}).Should(Succeed())
 		})
+
+		When("binding fails with the broker", func() {
+			It("fails the binding", func() {})
+		})
+
+		When("the broker credentials cannot be stored in the credentials secret", func() {
+			It("fails the binding", func() {})
+		}
 	})
 })

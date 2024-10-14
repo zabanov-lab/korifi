@@ -419,7 +419,6 @@ var _ = Describe("OSBAPI Client", func() {
 					BindRequest: osbapi.BindRequest{
 						ServiceId: "service-guid",
 						PlanID:    "plan-guid",
-						AppGUID:   "app-guid",
 						BindResource: osbapi.BindResource{
 							AppGUID: "app-guid",
 						},
@@ -455,7 +454,6 @@ var _ = Describe("OSBAPI Client", func() {
 				Expect(requestBody).To(MatchAllKeys(Keys{
 					"service_id": Equal("service-guid"),
 					"plan_id":    Equal("plan-guid"),
-					"app_guid":   Equal("app-guid"),
 					"bind_resource": MatchAllKeys(Keys{
 						"app_guid": Equal("app-guid"),
 					}),
