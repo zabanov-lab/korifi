@@ -28,7 +28,7 @@ var _ = Describe("Service Bindings", func() {
 	AfterEach(func() {
 		deleteSpace(spaceGUID)
 	})
-
+	// Add for managed bindings
 	Describe("POST /v3/service_credential_bindings/{guid}", func() {
 		JustBeforeEach(func() {
 			httpResp, httpError = adminClient.R().

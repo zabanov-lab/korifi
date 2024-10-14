@@ -245,8 +245,8 @@ func (a *Applier) applyServices(ctx context.Context, authInfo authorization.Info
 				"service", serviceName,
 			)
 		}
-
-		_, err := a.serviceBindingRepo.CreateServiceBinding(ctx, authInfo, repositories.CreateServiceBindingMessage{
+		// TODO check for managed
+		_, err := a.serviceBindingRepo.CreateUserProvidedServiceBinding(ctx, authInfo, repositories.CreateServiceBindingMessage{
 			Name:                serviceNameToServiceBinding[serviceName],
 			ServiceInstanceGUID: serviceInstance.GUID,
 			AppGUID:             appState.App.GUID,

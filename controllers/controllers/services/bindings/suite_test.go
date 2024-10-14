@@ -24,7 +24,9 @@ import (
 
 	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/managed"
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/bindings/upsi"
+	"code.cloudfoundry.org/korifi/controllers/controllers/services/brokers/fake"
 	"code.cloudfoundry.org/korifi/controllers/controllers/shared"
 	"code.cloudfoundry.org/korifi/tests/helpers"
 
@@ -41,12 +43,13 @@ import (
 )
 
 var (
-	ctx             context.Context
-	stopManager     context.CancelFunc
-	stopClientCache context.CancelFunc
-	testEnv         *envtest.Environment
-	adminClient     client.Client
-	k8sManager      manager.Manager
+	ctx                 context.Context
+	stopManager         context.CancelFunc
+	stopClientCache     context.CancelFunc
+	testEnv             *envtest.Environment
+	adminClient         client.Client
+	k8sManager          manager.Manager
+	brokerClientFactory *fake.BrokerClientFactory
 )
 
 func TestAPIs(t *testing.T) {
@@ -87,11 +90,14 @@ var _ = BeforeEach(func() {
 
 	adminClient, stopClientCache = helpers.NewCachedClient(testEnv.Config)
 
+	brokerClientFactory = new(fake.BrokerClientFactory)
+
 	err := bindings.NewReconciler(
 		k8sManager.GetClient(),
 		k8sManager.GetScheme(),
 		ctrl.Log.WithName("controllers").WithName("CFServiceBinding"),
 		upsi.NewReconciler(k8sManager.GetClient(), k8sManager.GetScheme()),
+		managed.NewReconciler(k8sManager.GetClient(), brokerClientFactory, k8sManager.GetScheme()),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 })

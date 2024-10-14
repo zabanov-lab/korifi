@@ -77,7 +77,7 @@ var _ = Describe("ServiceBindingRepo", func() {
 		).To(Succeed())
 	})
 
-	Describe("CreateServiceBinding", func() {
+	Describe("CreateUserProvidedServiceBinding", func() {
 		var (
 			serviceBindingRecord repositories.ServiceBindingRecord
 			createErr            error
@@ -104,7 +104,7 @@ var _ = Describe("ServiceBindingRepo", func() {
 		})
 
 		JustBeforeEach(func() {
-			serviceBindingRecord, createErr = repo.CreateServiceBinding(testCtx, authInfo, repositories.CreateServiceBindingMessage{
+			serviceBindingRecord, createErr = repo.CreateUserProvidedServiceBinding(testCtx, authInfo, repositories.CreateServiceBindingMessage{
 				Name:                bindingName,
 				ServiceInstanceGUID: serviceInstanceGUID,
 				AppGUID:             appGUID,
@@ -205,6 +205,100 @@ var _ = Describe("ServiceBindingRepo", func() {
 				})
 
 				It("creates the binding with the specified name", func() {
+					Expect(serviceBindingRecord.Name).To(Equal(bindingName))
+				})
+			})
+		})
+	})
+
+	Describe("CreateManagedServiceBinding", func() {
+		var (
+			serviceBindingRecord repositories.ServiceBindingRecord
+			createErr            error
+		)
+		BeforeEach(func() {
+			bindingName = nil
+		})
+
+		JustBeforeEach(func() {
+			serviceBindingRecord, createErr = repo.CreateManagedServiceBinding(testCtx, authInfo, repositories.CreateServiceBindingMessage{
+				Name:                bindingName,
+				ServiceInstanceGUID: serviceInstanceGUID,
+				AppGUID:             appGUID,
+				SpaceGUID:           space.Name,
+			})
+		})
+
+		It("returns a forbidden error", func() {
+			Expect(createErr).To(BeAssignableToTypeOf(apierrors.UnprocessableEntityError{}))
+		})
+
+		When("the user can create CFServiceBindings in the Space", func() {
+			BeforeEach(func() {
+				createRoleBinding(testCtx, userName, spaceDeveloperRole.Name, space.Name)
+			})
+
+			FIt("creates a new CFServiceBinding resource and returns a record", func() {
+				Expect(createErr).NotTo(HaveOccurred())
+
+				Expect(serviceBindingRecord.GUID).NotTo(BeEmpty())
+				Expect(serviceBindingRecord.Type).To(Equal("app"))
+				Expect(serviceBindingRecord.Name).To(BeNil())
+				Expect(serviceBindingRecord.AppGUID).To(Equal(appGUID))
+				Expect(serviceBindingRecord.ServiceInstanceGUID).To(Equal(serviceInstanceGUID))
+				Expect(serviceBindingRecord.SpaceGUID).To(Equal(space.Name))
+				Expect(serviceBindingRecord.CreatedAt).NotTo(BeZero())
+				Expect(serviceBindingRecord.UpdatedAt).NotTo(BeNil())
+
+				Expect(serviceBindingRecord.LastOperation.Type).To(Equal("create"))
+				Expect(serviceBindingRecord.LastOperation.State).To(Equal("In progress"))
+				Expect(serviceBindingRecord.LastOperation.Description).To(BeNil())
+				Expect(serviceBindingRecord.LastOperation.CreatedAt).To(BeZero())
+				Expect(serviceBindingRecord.LastOperation.UpdatedAt).To(BeNil())
+
+				Expect(serviceBindingRecord.Relationships()).To(Equal(map[string]string{
+					"app":              appGUID,
+					"service_instance": serviceInstanceGUID,
+				}))
+
+				serviceBinding := new(korifiv1alpha1.CFServiceBinding)
+				Expect(
+					k8sClient.Get(testCtx, types.NamespacedName{Name: serviceBindingRecord.GUID, Namespace: space.Name}, serviceBinding),
+				).To(Succeed())
+
+				Expect(serviceBinding.Labels).To(HaveKeyWithValue("servicebinding.io/provisioned-service", "true"))
+				Expect(serviceBinding.Spec).To(Equal(
+					korifiv1alpha1.CFServiceBindingSpec{
+						DisplayName: nil,
+						Service: corev1.ObjectReference{
+							Kind:       "CFServiceInstance",
+							APIVersion: korifiv1alpha1.GroupVersion.Identifier(),
+							Name:       serviceInstanceGUID,
+						},
+						AppRef: corev1.LocalObjectReference{
+							Name: appGUID,
+						},
+					},
+				))
+			})
+
+			When("the app does not exist", func() {
+				BeforeEach(func() {
+					appGUID = "i-do-not-exits"
+				})
+
+				FIt("reuturns an UnprocessableEntity error", func() {
+					Expect(createErr).To(BeAssignableToTypeOf(apierrors.UnprocessableEntityError{}))
+				})
+			})
+
+			When("The service binding has a name", func() {
+				BeforeEach(func() {
+					tempName := "some-name-for-a-binding"
+					bindingName = &tempName
+				})
+
+				FIt("creates the binding with the specified name", func() {
 					Expect(serviceBindingRecord.Name).To(Equal(bindingName))
 				})
 			})

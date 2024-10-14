@@ -129,7 +129,7 @@ type UpdateServiceBindingMessage struct {
 	MetadataPatch MetadataPatch
 }
 
-func (r *ServiceBindingRepo) CreateServiceBinding(ctx context.Context, authInfo authorization.Info, message CreateServiceBindingMessage) (ServiceBindingRecord, error) {
+func (r *ServiceBindingRepo) CreateUserProvidedServiceBinding(ctx context.Context, authInfo authorization.Info, message CreateServiceBindingMessage) (ServiceBindingRecord, error) {
 	userClient, err := r.userClientFactory.BuildClient(authInfo)
 	if err != nil {
 		return ServiceBindingRecord{}, fmt.Errorf("failed to build user client: %w", err)
@@ -165,7 +165,41 @@ func (r *ServiceBindingRepo) CreateServiceBinding(ctx context.Context, authInfo 
 		return ServiceBindingRecord{}, err
 	}
 
-	return cfServiceBindingToRecord(*cfServiceBinding), err
+	return cfUserProvidedServiceBindingToRecord(*cfServiceBinding), err
+}
+
+func (r *ServiceBindingRepo) CreateManagedServiceBinding(ctx context.Context, authInfo authorization.Info, message CreateServiceBindingMessage) (ServiceBindingRecord, error) {
+	userClient, err := r.userClientFactory.BuildClient(authInfo)
+	if err != nil {
+		return ServiceBindingRecord{}, fmt.Errorf("failed to build user client: %w", err)
+	}
+
+	cfServiceBinding := message.toCFServiceBinding()
+
+	cfApp := new(korifiv1alpha1.CFApp)
+	err = userClient.Get(ctx, types.NamespacedName{Name: cfServiceBinding.Spec.AppRef.Name, Namespace: cfServiceBinding.Namespace}, cfApp)
+	if err != nil {
+		return ServiceBindingRecord{},
+			apierrors.AsUnprocessableEntity(
+				apierrors.FromK8sError(err, ServiceBindingResourceType),
+				"Unable to use app. Ensure that the app exists and you have access to it.",
+				apierrors.ForbiddenError{},
+				apierrors.NotFoundError{},
+			)
+	}
+
+	err = userClient.Create(ctx, cfServiceBinding)
+	if err != nil {
+		if validationError, ok := validation.WebhookErrorToValidationError(err); ok {
+			if validationError.Type == bindings.ServiceBindingErrorType {
+				return ServiceBindingRecord{}, apierrors.NewUniquenessError(err, validationError.GetMessage())
+			}
+		}
+
+		return ServiceBindingRecord{}, apierrors.FromK8sError(err, ServiceBindingResourceType)
+	}
+
+	return cfManagedServiceBindingToRecord(*cfServiceBinding), nil
 }
 
 func (r *ServiceBindingRepo) DeleteServiceBinding(ctx context.Context, authInfo authorization.Info, guid string) error {
@@ -210,7 +244,7 @@ func (r *ServiceBindingRepo) GetServiceBinding(ctx context.Context, authInfo aut
 		return ServiceBindingRecord{}, apierrors.FromK8sError(err, ServiceBindingResourceType)
 	}
 
-	return cfServiceBindingToRecord(*serviceBinding), nil
+	return cfUserProvidedServiceBindingToRecord(*serviceBinding), nil
 }
 
 func (r *ServiceBindingRepo) UpdateServiceBinding(ctx context.Context, authInfo authorization.Info, updateMsg UpdateServiceBindingMessage) (ServiceBindingRecord, error) {
@@ -243,10 +277,10 @@ func (r *ServiceBindingRepo) UpdateServiceBinding(ctx context.Context, authInfo 
 		return ServiceBindingRecord{}, fmt.Errorf("failed to patch service binding metadata: %w", apierrors.FromK8sError(err, ServiceBindingResourceType))
 	}
 
-	return cfServiceBindingToRecord(*serviceBinding), nil
+	return cfUserProvidedServiceBindingToRecord(*serviceBinding), nil
 }
 
-func cfServiceBindingToRecord(binding korifiv1alpha1.CFServiceBinding) ServiceBindingRecord {
+func cfUserProvidedServiceBindingToRecord(binding korifiv1alpha1.CFServiceBinding) ServiceBindingRecord {
 	return ServiceBindingRecord{
 		GUID:                binding.Name,
 		Type:                ServiceBindingTypeApp,
@@ -264,6 +298,26 @@ func cfServiceBindingToRecord(binding korifiv1alpha1.CFServiceBinding) ServiceBi
 			Description: nil,
 			CreatedAt:   binding.CreationTimestamp.Time,
 			UpdatedAt:   getLastUpdatedTime(&binding),
+		},
+	}
+}
+
+func cfManagedServiceBindingToRecord(binding korifiv1alpha1.CFServiceBinding) ServiceBindingRecord {
+	return ServiceBindingRecord{
+		GUID:                binding.Name,
+		Type:                ServiceBindingTypeApp,
+		Name:                binding.Spec.DisplayName,
+		AppGUID:             binding.Spec.AppRef.Name,
+		ServiceInstanceGUID: binding.Spec.Service.Name,
+		SpaceGUID:           binding.Namespace,
+		Labels:              binding.Labels,
+		Annotations:         binding.Annotations,
+		CreatedAt:           binding.CreationTimestamp.Time,
+		UpdatedAt:           getLastUpdatedTime(&binding),
+		LastOperation: ServiceBindingLastOperation{
+			Type:        "create",
+			State:       "In progress",
+			Description: nil,
 		},
 	}
 }
@@ -302,5 +356,5 @@ func (r *ServiceBindingRepo) ListServiceBindings(ctx context.Context, authInfo a
 	}
 
 	filteredServiceBindings := itx.FromSlice(serviceBindings).Filter(message.matches)
-	return slices.Collect(it.Map(filteredServiceBindings, cfServiceBindingToRecord)), nil
+	return slices.Collect(it.Map(filteredServiceBindings, cfUserProvidedServiceBindingToRecord)), nil
 }

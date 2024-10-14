@@ -35,7 +35,7 @@ func GetServiceBindingIOSecretData(credentialsSecret *corev1.Secret) (map[string
 	}
 	secretData := map[string][]byte{}
 	for k, v := range credentials {
-		secretData[k], err = toBytes(v)
+		secretData[k], err = ToBytes(v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert value of key %q to bytes: %w", k, err)
 		}
@@ -48,7 +48,7 @@ func GetServiceBindingIOSecretData(credentialsSecret *corev1.Secret) (map[string
 	return secretData, err
 }
 
-func toBytes(value any) ([]byte, error) {
+func ToBytes(value any) ([]byte, error) {
 	valueString, ok := value.(string)
 	if ok {
 		return []byte(valueString), nil

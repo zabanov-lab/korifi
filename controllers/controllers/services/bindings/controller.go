@@ -50,10 +50,11 @@ type CredentialsReconciler interface {
 }
 
 type Reconciler struct {
-	k8sClient                 client.Client
-	scheme                    *runtime.Scheme
-	log                       logr.Logger
-	upsiCredentialsReconciler CredentialsReconciler
+	k8sClient                    client.Client
+	scheme                       *runtime.Scheme
+	log                          logr.Logger
+	upsiCredentialsReconciler    CredentialsReconciler
+	managedCredentialsReconciler CredentialsReconciler
 }
 
 func NewReconciler(
@@ -61,8 +62,15 @@ func NewReconciler(
 	scheme *runtime.Scheme,
 	log logr.Logger,
 	upsiCredentialsReconciler CredentialsReconciler,
+	managedCredentialsReconciler CredentialsReconciler,
 ) *k8s.PatchingReconciler[korifiv1alpha1.CFServiceBinding, *korifiv1alpha1.CFServiceBinding] {
-	cfBindingReconciler := &Reconciler{k8sClient: k8sClient, scheme: scheme, log: log, upsiCredentialsReconciler: upsiCredentialsReconciler}
+	cfBindingReconciler := &Reconciler{
+		k8sClient:                    k8sClient,
+		scheme:                       scheme,
+		log:                          log,
+		upsiCredentialsReconciler:    upsiCredentialsReconciler,
+		managedCredentialsReconciler: managedCredentialsReconciler,
+	}
 	return k8s.NewPatchingReconciler(log, k8sClient, cfBindingReconciler)
 }
 
@@ -152,11 +160,19 @@ func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceBinding *ko
 		return ctrl.Result{}, err
 	}
 
-	res, err := r.upsiCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
-	if needsRequeue(res) || err != nil {
-		return res, err
+	var res ctrl.Result
+	if cfServiceInstance.Spec.Type == korifiv1alpha1.UserProvidedType {
+		res, err = r.upsiCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
+		if needsRequeue(res) || err != nil {
+			return res, err
+		}
+	} else {
+		res, err = r.managedCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
+		if needsRequeue(res) || err != nil {
+			return res, err
+		}
 	}
-
+	log.Info("Here.....................................")
 	cfApp := new(korifiv1alpha1.CFApp)
 	err = r.k8sClient.Get(ctx, types.NamespacedName{Name: cfServiceBinding.Spec.AppRef.Name, Namespace: cfServiceBinding.Namespace}, cfApp)
 	if err != nil {

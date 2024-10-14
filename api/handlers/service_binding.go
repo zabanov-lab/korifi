@@ -13,6 +13,7 @@ import (
 	"code.cloudfoundry.org/korifi/api/presenter"
 	"code.cloudfoundry.org/korifi/api/repositories"
 	"code.cloudfoundry.org/korifi/api/routing"
+	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
 )
 
 const (
@@ -30,7 +31,8 @@ type ServiceBinding struct {
 
 //counterfeiter:generate -o fake -fake-name CFServiceBindingRepository . CFServiceBindingRepository
 type CFServiceBindingRepository interface {
-	CreateServiceBinding(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
+	CreateUserProvidedServiceBinding(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
+	CreateManagedServiceBinding(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
 	DeleteServiceBinding(context.Context, authorization.Info, string) error
 	ListServiceBindings(context.Context, authorization.Info, repositories.ListServiceBindingsMessage) ([]repositories.ServiceBindingRecord, error)
 	GetServiceBinding(context.Context, authorization.Info, string) (repositories.ServiceBindingRecord, error)
@@ -47,6 +49,7 @@ func NewServiceBinding(serverURL url.URL, serviceBindingRepo CFServiceBindingRep
 	}
 }
 
+// implement for managed
 func (h *ServiceBinding) create(r *http.Request) (*routing.Response, error) {
 	authInfo, _ := authorization.InfoFromContext(r.Context())
 	logger := logr.FromContextOrDiscard(r.Context()).WithName("handlers.service-binding.create")
@@ -75,12 +78,40 @@ func (h *ServiceBinding) create(r *http.Request) (*routing.Response, error) {
 		)
 	}
 
-	serviceBinding, err := h.serviceBindingRepo.CreateServiceBinding(r.Context(), authInfo, payload.ToMessage(app.SpaceGUID))
+	ctx := logr.NewContext(r.Context(), logger.WithValues("app", app.GUID, "service-instance", serviceInstance.GUID))
+	if serviceInstance.Type == korifiv1alpha1.ManagedType {
+		return h.createManagedServiceBinding(ctx, authInfo, payload, app)
+	}
+
+	return h.createUserProvidedServiceBinding(ctx, authInfo, payload, app)
+}
+
+func (h *ServiceBinding) createUserProvidedServiceBinding(
+	ctx context.Context,
+	authInfo authorization.Info,
+	payload payloads.ServiceBindingCreate,
+	app repositories.AppRecord,
+) (*routing.Response, error) {
+	serviceBinding, err := h.serviceBindingRepo.CreateUserProvidedServiceBinding(ctx, authInfo, payload.ToMessage(app.SpaceGUID))
 	if err != nil {
-		return nil, apierrors.LogAndReturn(logger, err, "failed to create ServiceBinding", "App GUID", app.GUID, "ServiceInstance GUID", serviceInstance.GUID)
+		return nil, apierrors.LogAndReturn(logr.FromContextOrDiscard(ctx), err, "failed to create ServiceBinding")
 	}
 
 	return routing.NewResponse(http.StatusCreated).WithBody(presenter.ForServiceBinding(serviceBinding, h.serverURL)), nil
+}
+
+func (h *ServiceBinding) createManagedServiceBinding(
+	ctx context.Context,
+	authInfo authorization.Info,
+	payload payloads.ServiceBindingCreate,
+	app repositories.AppRecord,
+) (*routing.Response, error) {
+	serviceBinding, err := h.serviceBindingRepo.CreateManagedServiceBinding(ctx, authInfo, payload.ToMessage(app.SpaceGUID))
+	if err != nil {
+		return nil, apierrors.LogAndReturn(logr.FromContextOrDiscard(ctx), err, "failed to create ServiceBinding")
+	}
+
+	return routing.NewResponse(http.StatusAccepted).WithBody(presenter.ForServiceBinding(serviceBinding, h.serverURL)), nil
 }
 
 func (h *ServiceBinding) delete(r *http.Request) (*routing.Response, error) {
