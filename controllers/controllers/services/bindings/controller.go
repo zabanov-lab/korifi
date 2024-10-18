@@ -153,6 +153,9 @@ func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceBinding *ko
 
 	cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
 	log.V(1).Info("set observed generation", "generation", cfServiceBinding.Status.ObservedGeneration)
+	if cfServiceBinding.Annotations == nil {
+		cfServiceBinding.Annotations = map[string]string{}
+	}
 
 	err = controllerutil.SetOwnerReference(cfServiceInstance, cfServiceBinding, r.scheme)
 	if err != nil {
@@ -160,19 +163,11 @@ func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceBinding *ko
 		return ctrl.Result{}, err
 	}
 
-	var res ctrl.Result
-	if cfServiceInstance.Spec.Type == korifiv1alpha1.UserProvidedType {
-		res, err = r.upsiCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
-		if needsRequeue(res) || err != nil {
-			return res, err
-		}
-	} else {
-		res, err = r.managedCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
-		if needsRequeue(res) || err != nil {
-			return res, err
-		}
+	res, err := r.reconcileCredentialsSecrets(ctx, cfServiceInstance.Spec.Type, cfServiceBinding)
+	if needsRequeue(res, err) {
+		return res, err
 	}
-	log.Info("Here.....................................")
+
 	cfApp := new(korifiv1alpha1.CFApp)
 	err = r.k8sClient.Get(ctx, types.NamespacedName{Name: cfServiceBinding.Spec.AppRef.Name, Namespace: cfServiceBinding.Namespace}, cfApp)
 	if err != nil {
@@ -193,7 +188,19 @@ func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceBinding *ko
 	return ctrl.Result{}, nil
 }
 
-func needsRequeue(res ctrl.Result) bool {
+func (r *Reconciler) reconcileCredentialsSecrets(ctx context.Context, instanceType korifiv1alpha1.InstanceType, cfServiceBinding *korifiv1alpha1.CFServiceBinding) (ctrl.Result, error) {
+	if instanceType == korifiv1alpha1.UserProvidedType {
+		return r.upsiCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
+	}
+
+	return r.managedCredentialsReconciler.ReconcileResource(ctx, cfServiceBinding)
+}
+
+func needsRequeue(res ctrl.Result, err error) bool {
+	if err != nil {
+		return true
+	}
+
 	return !res.IsZero()
 }
 

@@ -11,33 +11,18 @@ import (
 )
 
 type CFServiceBindingRepository struct {
-	CreateManagedServiceBindingStub        func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
-	createManagedServiceBindingMutex       sync.RWMutex
-	createManagedServiceBindingArgsForCall []struct {
+	CreateServiceBindingStub        func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
+	createServiceBindingMutex       sync.RWMutex
+	createServiceBindingArgsForCall []struct {
 		arg1 context.Context
 		arg2 authorization.Info
 		arg3 repositories.CreateServiceBindingMessage
 	}
-	createManagedServiceBindingReturns struct {
+	createServiceBindingReturns struct {
 		result1 repositories.ServiceBindingRecord
 		result2 error
 	}
-	createManagedServiceBindingReturnsOnCall map[int]struct {
-		result1 repositories.ServiceBindingRecord
-		result2 error
-	}
-	CreateUserProvidedServiceBindingStub        func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
-	createUserProvidedServiceBindingMutex       sync.RWMutex
-	createUserProvidedServiceBindingArgsForCall []struct {
-		arg1 context.Context
-		arg2 authorization.Info
-		arg3 repositories.CreateServiceBindingMessage
-	}
-	createUserProvidedServiceBindingReturns struct {
-		result1 repositories.ServiceBindingRecord
-		result2 error
-	}
-	createUserProvidedServiceBindingReturnsOnCall map[int]struct {
+	createServiceBindingReturnsOnCall map[int]struct {
 		result1 repositories.ServiceBindingRecord
 		result2 error
 	}
@@ -103,18 +88,18 @@ type CFServiceBindingRepository struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBinding(arg1 context.Context, arg2 authorization.Info, arg3 repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error) {
-	fake.createManagedServiceBindingMutex.Lock()
-	ret, specificReturn := fake.createManagedServiceBindingReturnsOnCall[len(fake.createManagedServiceBindingArgsForCall)]
-	fake.createManagedServiceBindingArgsForCall = append(fake.createManagedServiceBindingArgsForCall, struct {
+func (fake *CFServiceBindingRepository) CreateServiceBinding(arg1 context.Context, arg2 authorization.Info, arg3 repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error) {
+	fake.createServiceBindingMutex.Lock()
+	ret, specificReturn := fake.createServiceBindingReturnsOnCall[len(fake.createServiceBindingArgsForCall)]
+	fake.createServiceBindingArgsForCall = append(fake.createServiceBindingArgsForCall, struct {
 		arg1 context.Context
 		arg2 authorization.Info
 		arg3 repositories.CreateServiceBindingMessage
 	}{arg1, arg2, arg3})
-	stub := fake.CreateManagedServiceBindingStub
-	fakeReturns := fake.createManagedServiceBindingReturns
-	fake.recordInvocation("CreateManagedServiceBinding", []interface{}{arg1, arg2, arg3})
-	fake.createManagedServiceBindingMutex.Unlock()
+	stub := fake.CreateServiceBindingStub
+	fakeReturns := fake.createServiceBindingReturns
+	fake.recordInvocation("CreateServiceBinding", []interface{}{arg1, arg2, arg3})
+	fake.createServiceBindingMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3)
 	}
@@ -124,112 +109,46 @@ func (fake *CFServiceBindingRepository) CreateManagedServiceBinding(arg1 context
 	return fakeReturns.result1, fakeReturns.result2
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBindingCallCount() int {
-	fake.createManagedServiceBindingMutex.RLock()
-	defer fake.createManagedServiceBindingMutex.RUnlock()
-	return len(fake.createManagedServiceBindingArgsForCall)
+func (fake *CFServiceBindingRepository) CreateServiceBindingCallCount() int {
+	fake.createServiceBindingMutex.RLock()
+	defer fake.createServiceBindingMutex.RUnlock()
+	return len(fake.createServiceBindingArgsForCall)
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBindingCalls(stub func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)) {
-	fake.createManagedServiceBindingMutex.Lock()
-	defer fake.createManagedServiceBindingMutex.Unlock()
-	fake.CreateManagedServiceBindingStub = stub
+func (fake *CFServiceBindingRepository) CreateServiceBindingCalls(stub func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)) {
+	fake.createServiceBindingMutex.Lock()
+	defer fake.createServiceBindingMutex.Unlock()
+	fake.CreateServiceBindingStub = stub
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBindingArgsForCall(i int) (context.Context, authorization.Info, repositories.CreateServiceBindingMessage) {
-	fake.createManagedServiceBindingMutex.RLock()
-	defer fake.createManagedServiceBindingMutex.RUnlock()
-	argsForCall := fake.createManagedServiceBindingArgsForCall[i]
+func (fake *CFServiceBindingRepository) CreateServiceBindingArgsForCall(i int) (context.Context, authorization.Info, repositories.CreateServiceBindingMessage) {
+	fake.createServiceBindingMutex.RLock()
+	defer fake.createServiceBindingMutex.RUnlock()
+	argsForCall := fake.createServiceBindingArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBindingReturns(result1 repositories.ServiceBindingRecord, result2 error) {
-	fake.createManagedServiceBindingMutex.Lock()
-	defer fake.createManagedServiceBindingMutex.Unlock()
-	fake.CreateManagedServiceBindingStub = nil
-	fake.createManagedServiceBindingReturns = struct {
+func (fake *CFServiceBindingRepository) CreateServiceBindingReturns(result1 repositories.ServiceBindingRecord, result2 error) {
+	fake.createServiceBindingMutex.Lock()
+	defer fake.createServiceBindingMutex.Unlock()
+	fake.CreateServiceBindingStub = nil
+	fake.createServiceBindingReturns = struct {
 		result1 repositories.ServiceBindingRecord
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *CFServiceBindingRepository) CreateManagedServiceBindingReturnsOnCall(i int, result1 repositories.ServiceBindingRecord, result2 error) {
-	fake.createManagedServiceBindingMutex.Lock()
-	defer fake.createManagedServiceBindingMutex.Unlock()
-	fake.CreateManagedServiceBindingStub = nil
-	if fake.createManagedServiceBindingReturnsOnCall == nil {
-		fake.createManagedServiceBindingReturnsOnCall = make(map[int]struct {
+func (fake *CFServiceBindingRepository) CreateServiceBindingReturnsOnCall(i int, result1 repositories.ServiceBindingRecord, result2 error) {
+	fake.createServiceBindingMutex.Lock()
+	defer fake.createServiceBindingMutex.Unlock()
+	fake.CreateServiceBindingStub = nil
+	if fake.createServiceBindingReturnsOnCall == nil {
+		fake.createServiceBindingReturnsOnCall = make(map[int]struct {
 			result1 repositories.ServiceBindingRecord
 			result2 error
 		})
 	}
-	fake.createManagedServiceBindingReturnsOnCall[i] = struct {
-		result1 repositories.ServiceBindingRecord
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBinding(arg1 context.Context, arg2 authorization.Info, arg3 repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error) {
-	fake.createUserProvidedServiceBindingMutex.Lock()
-	ret, specificReturn := fake.createUserProvidedServiceBindingReturnsOnCall[len(fake.createUserProvidedServiceBindingArgsForCall)]
-	fake.createUserProvidedServiceBindingArgsForCall = append(fake.createUserProvidedServiceBindingArgsForCall, struct {
-		arg1 context.Context
-		arg2 authorization.Info
-		arg3 repositories.CreateServiceBindingMessage
-	}{arg1, arg2, arg3})
-	stub := fake.CreateUserProvidedServiceBindingStub
-	fakeReturns := fake.createUserProvidedServiceBindingReturns
-	fake.recordInvocation("CreateUserProvidedServiceBinding", []interface{}{arg1, arg2, arg3})
-	fake.createUserProvidedServiceBindingMutex.Unlock()
-	if stub != nil {
-		return stub(arg1, arg2, arg3)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBindingCallCount() int {
-	fake.createUserProvidedServiceBindingMutex.RLock()
-	defer fake.createUserProvidedServiceBindingMutex.RUnlock()
-	return len(fake.createUserProvidedServiceBindingArgsForCall)
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBindingCalls(stub func(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)) {
-	fake.createUserProvidedServiceBindingMutex.Lock()
-	defer fake.createUserProvidedServiceBindingMutex.Unlock()
-	fake.CreateUserProvidedServiceBindingStub = stub
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBindingArgsForCall(i int) (context.Context, authorization.Info, repositories.CreateServiceBindingMessage) {
-	fake.createUserProvidedServiceBindingMutex.RLock()
-	defer fake.createUserProvidedServiceBindingMutex.RUnlock()
-	argsForCall := fake.createUserProvidedServiceBindingArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBindingReturns(result1 repositories.ServiceBindingRecord, result2 error) {
-	fake.createUserProvidedServiceBindingMutex.Lock()
-	defer fake.createUserProvidedServiceBindingMutex.Unlock()
-	fake.CreateUserProvidedServiceBindingStub = nil
-	fake.createUserProvidedServiceBindingReturns = struct {
-		result1 repositories.ServiceBindingRecord
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *CFServiceBindingRepository) CreateUserProvidedServiceBindingReturnsOnCall(i int, result1 repositories.ServiceBindingRecord, result2 error) {
-	fake.createUserProvidedServiceBindingMutex.Lock()
-	defer fake.createUserProvidedServiceBindingMutex.Unlock()
-	fake.CreateUserProvidedServiceBindingStub = nil
-	if fake.createUserProvidedServiceBindingReturnsOnCall == nil {
-		fake.createUserProvidedServiceBindingReturnsOnCall = make(map[int]struct {
-			result1 repositories.ServiceBindingRecord
-			result2 error
-		})
-	}
-	fake.createUserProvidedServiceBindingReturnsOnCall[i] = struct {
+	fake.createServiceBindingReturnsOnCall[i] = struct {
 		result1 repositories.ServiceBindingRecord
 		result2 error
 	}{result1, result2}
@@ -499,10 +418,8 @@ func (fake *CFServiceBindingRepository) UpdateServiceBindingReturnsOnCall(i int,
 func (fake *CFServiceBindingRepository) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.createManagedServiceBindingMutex.RLock()
-	defer fake.createManagedServiceBindingMutex.RUnlock()
-	fake.createUserProvidedServiceBindingMutex.RLock()
-	defer fake.createUserProvidedServiceBindingMutex.RUnlock()
+	fake.createServiceBindingMutex.RLock()
+	defer fake.createServiceBindingMutex.RUnlock()
 	fake.deleteServiceBindingMutex.RLock()
 	defer fake.deleteServiceBindingMutex.RUnlock()
 	fake.getServiceBindingMutex.RLock()

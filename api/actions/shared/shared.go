@@ -43,7 +43,7 @@ type CFRouteRepository interface {
 
 //counterfeiter:generate -o fake -fake-name CFServiceBindingRepository . CFServiceBindingRepository
 type CFServiceBindingRepository interface {
-	CreateUserProvidedServiceBinding(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
+	CreateServiceBinding(context.Context, authorization.Info, repositories.CreateServiceBindingMessage) (repositories.ServiceBindingRecord, error)
 	DeleteServiceBinding(context.Context, authorization.Info, string) error
 	ListServiceBindings(context.Context, authorization.Info, repositories.ListServiceBindingsMessage) ([]repositories.ServiceBindingRecord, error)
 	UpdateServiceBinding(context.Context, authorization.Info, repositories.UpdateServiceBindingMessage) (repositories.ServiceBindingRecord, error)

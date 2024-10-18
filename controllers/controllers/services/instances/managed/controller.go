@@ -252,11 +252,7 @@ func (r *Reconciler) finalizeCFServiceInstance(
 		return ctrl.Result{}, nil
 	}
 
-	err := r.deprovisionServiceinstance(ctx, serviceInstance)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
+	r.deprovisionServiceinstance(ctx, serviceInstance)
 	meta.SetStatusCondition(&serviceInstance.Status.Conditions, metav1.Condition{
 		Type:               korifiv1alpha1.DeprovisionRequestedCondition,
 		Status:             metav1.ConditionTrue,
@@ -264,34 +260,35 @@ func (r *Reconciler) finalizeCFServiceInstance(
 		LastTransitionTime: metav1.NewTime(time.Now()),
 		Reason:             "DeprovisionRequested",
 	})
+
 	return ctrl.Result{Requeue: true}, nil
 }
 
-func (r *Reconciler) deprovisionServiceinstance(ctx context.Context, serviceInstance *korifiv1alpha1.CFServiceInstance) error {
+func (r *Reconciler) deprovisionServiceinstance(ctx context.Context, serviceInstance *korifiv1alpha1.CFServiceInstance) {
 	log := logr.FromContextOrDiscard(ctx).WithName("finalizeCFServiceInstance")
 
 	servicePlan, err := r.assets.GetServicePlan(ctx, serviceInstance.Spec.PlanGUID)
 	if err != nil {
 		log.Error(err, "failed to get service plan")
-		return nil
+		return
 	}
 
 	serviceBroker, err := r.assets.GetServiceBroker(ctx, servicePlan.Labels[korifiv1alpha1.RelServiceBrokerGUIDLabel])
 	if err != nil {
 		log.Error(err, "failed to get service broker")
-		return nil
+		return
 	}
 
 	serviceOffering, err := r.assets.GetServiceOffering(ctx, servicePlan.Labels[korifiv1alpha1.RelServiceOfferingGUIDLabel])
 	if err != nil {
 		log.Error(err, "failed to get service offering")
-		return nil
+		return
 	}
 
 	osbapiClient, err := r.osbapiClientFactory.CreateClient(ctx, serviceBroker)
 	if err != nil {
 		log.Error(err, "failed to create broker client", "broker", serviceBroker.Name)
-		return nil
+		return
 	}
 	var deprovisionResponse osbapi.ServiceInstanceOperationResponse
 	deprovisionResponse, err = osbapiClient.Deprovision(ctx, osbapi.InstanceDeprovisionPayload{
@@ -303,11 +300,10 @@ func (r *Reconciler) deprovisionServiceinstance(ctx context.Context, serviceInst
 	})
 	if err != nil {
 		log.Error(err, "failed to deprovision service instance")
-		return k8s.NewNotReadyError().WithReason("DeprovisionFailed")
+		return
 	}
 
 	serviceInstance.Status.DeprovisionOperation = deprovisionResponse.Operation
-	return nil
 }
 
 func (r *Reconciler) getNamespace(ctx context.Context, namespaceName string) (*corev1.Namespace, error) {

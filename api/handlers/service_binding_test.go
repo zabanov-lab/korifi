@@ -133,7 +133,7 @@ var _ = FDescribe("ServiceBinding", func() {
 
 			It("returns an error and doesn't create the ServiceBinding", func() {
 				expectUnknownError()
-				Expect(serviceBindingRepo.CreateUserProvidedServiceBindingCallCount()).To(Equal(0))
+				Expect(serviceBindingRepo.CreateServiceBindingCallCount()).To(Equal(0))
 			})
 		})
 
@@ -161,7 +161,7 @@ var _ = FDescribe("ServiceBinding", func() {
 
 			It("returns an error and doesn't create the ServiceBinding", func() {
 				expectUnknownError()
-				Expect(serviceBindingRepo.CreateUserProvidedServiceBindingCallCount()).To(Equal(0))
+				Expect(serviceBindingRepo.CreateServiceBindingCallCount()).To(Equal(0))
 			})
 		})
 
@@ -173,7 +173,7 @@ var _ = FDescribe("ServiceBinding", func() {
 
 			It("returns an error and doesn't create the ServiceBinding", func() {
 				expectUnprocessableEntityError("The service instance and the app are in different spaces")
-				Expect(serviceBindingRepo.CreateUserProvidedServiceBindingCallCount()).To(Equal(0))
+				Expect(serviceBindingRepo.CreateServiceBindingCallCount()).To(Equal(0))
 			})
 		})
 
@@ -185,14 +185,14 @@ var _ = FDescribe("ServiceBinding", func() {
 					Type:      korifiv1alpha1.UserProvidedType,
 				}, nil)
 
-				serviceBindingRepo.CreateUserProvidedServiceBindingReturns(repositories.ServiceBindingRecord{
+				serviceBindingRepo.CreateServiceBindingReturns(repositories.ServiceBindingRecord{
 					GUID: "service-binding-guid",
 				}, nil)
 			})
 
 			It("creates a service binding", func() {
-				Expect(serviceBindingRepo.CreateUserProvidedServiceBindingCallCount()).To(Equal(1))
-				_, actualAuthInfo, createServiceBindingMessage := serviceBindingRepo.CreateUserProvidedServiceBindingArgsForCall(0)
+				Expect(serviceBindingRepo.CreateServiceBindingCallCount()).To(Equal(1))
+				_, actualAuthInfo, createServiceBindingMessage := serviceBindingRepo.CreateServiceBindingArgsForCall(0)
 				Expect(actualAuthInfo).To(Equal(authInfo))
 				Expect(createServiceBindingMessage.AppGUID).To(Equal("app-guid"))
 				Expect(createServiceBindingMessage.ServiceInstanceGUID).To(Equal("service-instance-guid"))
@@ -208,7 +208,7 @@ var _ = FDescribe("ServiceBinding", func() {
 
 			When("creating the ServiceBinding errors", func() {
 				BeforeEach(func() {
-					serviceBindingRepo.CreateUserProvidedServiceBindingReturns(repositories.ServiceBindingRecord{}, errors.New("boom"))
+					serviceBindingRepo.CreateServiceBindingReturns(repositories.ServiceBindingRecord{}, errors.New("boom"))
 				})
 
 				It("returns an error", func() {
@@ -225,30 +225,26 @@ var _ = FDescribe("ServiceBinding", func() {
 					Type:      korifiv1alpha1.ManagedType,
 				}, nil)
 
-				serviceBindingRepo.CreateManagedServiceBindingReturns(repositories.ServiceBindingRecord{
+				serviceBindingRepo.CreateServiceBindingReturns(repositories.ServiceBindingRecord{
 					GUID: "service-binding-guid",
 				}, nil)
 			})
 
 			It("creates a binding", func() {
-				Expect(serviceBindingRepo.CreateManagedServiceBindingCallCount()).To(Equal(1))
-				_, actualAuthInfo, createServiceBindingMessage := serviceBindingRepo.CreateManagedServiceBindingArgsForCall(0)
+				Expect(serviceBindingRepo.CreateServiceBindingCallCount()).To(Equal(1))
+				_, actualAuthInfo, createServiceBindingMessage := serviceBindingRepo.CreateServiceBindingArgsForCall(0)
 				Expect(actualAuthInfo).To(Equal(authInfo))
 				Expect(createServiceBindingMessage.AppGUID).To(Equal("app-guid"))
 				Expect(createServiceBindingMessage.ServiceInstanceGUID).To(Equal("service-instance-guid"))
 				Expect(createServiceBindingMessage.SpaceGUID).To(Equal("space-guid"))
-
 				Expect(rr).To(HaveHTTPStatus(http.StatusAccepted))
-				Expect(rr).To(HaveHTTPHeaderWithValue("Content-Type", "application/json"))
-				Expect(rr).To(HaveHTTPBody(SatisfyAll(
-					MatchJSONPath("$.guid", "service-binding-guid"),
-					MatchJSONPath("$.links.self.href", "https://api.example.org/v3/service_credential_bindings/service-binding-guid"),
-				)))
+				Expect(rr).To(HaveHTTPHeaderWithValue("Location",
+					ContainSubstring("/v3/jobs/managed_service_binding.create~service-binding-guid")))
 			})
 
 			When("creating the ServiceBinding errors", func() {
 				BeforeEach(func() {
-					serviceBindingRepo.CreateManagedServiceBindingReturns(repositories.ServiceBindingRecord{}, errors.New("boom"))
+					serviceBindingRepo.CreateServiceBindingReturns(repositories.ServiceBindingRecord{}, errors.New("boom"))
 				})
 
 				It("returns an error", func() {

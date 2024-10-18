@@ -65,6 +65,7 @@ type InstanceDeprovisionRequest struct {
 type BindRequest struct {
 	ServiceId    string         `json:"service_id"`
 	PlanID       string         `json:"plan_id"`
+	AppGUID      string         `json:"app_guid"`
 	BindResource BindResource   `json:"bind_resource"`
 	Parameters   map[string]any `json:"parameters"`
 }

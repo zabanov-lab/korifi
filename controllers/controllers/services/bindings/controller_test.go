@@ -2,6 +2,7 @@ package bindings_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	korifiv1alpha1 "code.cloudfoundry.org/korifi/controllers/api/v1alpha1"
@@ -26,14 +27,10 @@ import (
 
 var _ = Describe("CFServiceBinding", func() {
 	var (
-		cfApp                     *korifiv1alpha1.CFApp
-		instance                  *korifiv1alpha1.CFServiceInstance
-		binding                   *korifiv1alpha1.CFServiceBinding
-		instanceCredentialsSecret *corev1.Secret
-		serviceBroker             *korifiv1alpha1.CFServiceBroker
-		serviceOffering           *korifiv1alpha1.CFServiceOffering
-		servicePlan               *korifiv1alpha1.CFServicePlan
-		testNamespace             string
+		testNamespace string
+		cfApp         *korifiv1alpha1.CFApp
+		instanceGUID  string
+		binding       *korifiv1alpha1.CFServiceBinding
 	)
 
 	BeforeEach(func() {
@@ -61,95 +58,7 @@ var _ = Describe("CFServiceBinding", func() {
 			adminClient.Create(ctx, cfApp),
 		).To(Succeed())
 
-		credentialsBytes, err := json.Marshal(map[string]any{
-			"obj": map[string]any{
-				"foo": "bar",
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		instanceCredentialsSecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      uuid.NewString(),
-				Namespace: testNamespace,
-			},
-			Data: map[string][]byte{
-				tools.CredentialsSecretKey: credentialsBytes,
-			},
-		}
-
-		Expect(adminClient.Create(ctx, instanceCredentialsSecret)).To(Succeed())
-
-		serviceBroker = &korifiv1alpha1.CFServiceBroker{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: rootNamespace,
-				Name:      uuid.NewString(),
-			},
-			Spec: korifiv1alpha1.CFServiceBrokerSpec{
-				ServiceBroker: services.ServiceBroker{
-					Name: "my-service-broker",
-				},
-				Credentials: corev1.LocalObjectReference{
-					Name: "my-broker-secret",
-				},
-			},
-		}
-		Expect(adminClient.Create(ctx, serviceBroker)).To(Succeed())
-
-		serviceOffering = &korifiv1alpha1.CFServiceOffering{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
-				Labels: map[string]string{
-					korifiv1alpha1.RelServiceBrokerGUIDLabel: serviceBroker.Name,
-				},
-			},
-			Spec: korifiv1alpha1.CFServiceOfferingSpec{
-				ServiceOffering: services.ServiceOffering{
-					BrokerCatalog: services.ServiceBrokerCatalog{
-						ID: "service-offering-id",
-					},
-				},
-			},
-		}
-		Expect(adminClient.Create(ctx, serviceOffering)).To(Succeed())
-
-		servicePlan = &korifiv1alpha1.CFServicePlan{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      uuid.NewString(),
-				Namespace: rootNamespace,
-				Labels: map[string]string{
-					korifiv1alpha1.RelServiceBrokerGUIDLabel:   serviceBroker.Name,
-					korifiv1alpha1.RelServiceOfferingGUIDLabel: serviceOffering.Name,
-				},
-			},
-			Spec: korifiv1alpha1.CFServicePlanSpec{
-				Visibility: korifiv1alpha1.ServicePlanVisibility{
-					Type: "public",
-				},
-				ServicePlan: services.ServicePlan{
-					BrokerCatalog: services.ServicePlanBrokerCatalog{
-						ID: "service-plan-id",
-					},
-				},
-			},
-		}
-		Expect(adminClient.Create(ctx, servicePlan)).To(Succeed())
-
-		instance = &korifiv1alpha1.CFServiceInstance{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      uuid.NewString(),
-				Namespace: testNamespace,
-			},
-			Spec: korifiv1alpha1.CFServiceInstanceSpec{
-				DisplayName: "mongodb-service-instance-name",
-				Type:        "user-provided",
-				Tags:        []string{},
-			},
-		}
-		Expect(adminClient.Create(ctx, instance)).To(Succeed())
-		Expect(k8s.Patch(ctx, adminClient, instance, func() {
-			instance.Status.Credentials.Name = instanceCredentialsSecret.Name
-		})).To(Succeed())
+		instanceGUID = uuid.NewString()
 
 		binding = &korifiv1alpha1.CFServiceBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -159,7 +68,7 @@ var _ = Describe("CFServiceBinding", func() {
 			Spec: korifiv1alpha1.CFServiceBindingSpec{
 				Service: corev1.ObjectReference{
 					Kind:       "ServiceInstance",
-					Name:       instance.Name,
+					Name:       instanceGUID,
 					APIVersion: "korifi.cloudfoundry.org/v1alpha1",
 				},
 				AppRef: corev1.LocalObjectReference{
@@ -170,23 +79,64 @@ var _ = Describe("CFServiceBinding", func() {
 		Expect(adminClient.Create(ctx, binding)).To(Succeed())
 	})
 
-	It("sets the ObservedGeneration status field", func() {
-		Eventually(func(g Gomega) {
-			g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
-			g.Expect(binding.Status.ObservedGeneration).To(Equal(binding.Generation))
-		}).Should(Succeed())
-	})
+	Describe("user-provided instances", func() {
+		var (
+			instance                  *korifiv1alpha1.CFServiceInstance
+			instanceCredentialsSecret *corev1.Secret
+		)
 
-	It("sets an owner reference from the instance to the binding", func() {
-		Eventually(func(g Gomega) {
-			g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
-			g.Expect(binding.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
-				"Name": Equal(instance.Name),
-			})))
-		}).Should(Succeed())
-	})
+		BeforeEach(func() {
+			credentialsBytes, err := json.Marshal(map[string]any{
+				"obj": map[string]any{
+					"foo": "bar",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			instanceCredentialsSecret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      uuid.NewString(),
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					tools.CredentialsSecretKey: credentialsBytes,
+				},
+			}
 
-	When("the instance is user-provided", func() {
+			Expect(adminClient.Create(ctx, instanceCredentialsSecret)).To(Succeed())
+
+			instance = &korifiv1alpha1.CFServiceInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      instanceGUID,
+					Namespace: testNamespace,
+				},
+				Spec: korifiv1alpha1.CFServiceInstanceSpec{
+					DisplayName: "mongodb-service-instance-name",
+					Type:        "user-provided",
+					Tags:        []string{},
+				},
+			}
+			Expect(adminClient.Create(ctx, instance)).To(Succeed())
+			Expect(k8s.Patch(ctx, adminClient, instance, func() {
+				instance.Status.Credentials.Name = instanceCredentialsSecret.Name
+			})).To(Succeed())
+		})
+
+		It("sets the ObservedGeneration status field", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+				g.Expect(binding.Status.ObservedGeneration).To(Equal(binding.Generation))
+			}).Should(Succeed())
+		})
+
+		It("sets an owner reference from the instance to the binding", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+				g.Expect(binding.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
+					"Name": Equal(instance.Name),
+				})))
+			}).Should(Succeed())
+		})
+
 		It("sets the binding status credentials name to the instance credentials secret", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
@@ -569,9 +519,73 @@ var _ = Describe("CFServiceBinding", func() {
 		})
 	})
 
-	When("the service instance is managed", func() {
-		var brokerClient *fake.BrokerClient
+	Describe("managed service instances", func() {
+		var (
+			brokerClient *fake.BrokerClient
+
+			serviceBroker   *korifiv1alpha1.CFServiceBroker
+			serviceOffering *korifiv1alpha1.CFServiceOffering
+			servicePlan     *korifiv1alpha1.CFServicePlan
+			instance        *korifiv1alpha1.CFServiceInstance
+		)
+
 		BeforeEach(func() {
+			serviceBroker = &korifiv1alpha1.CFServiceBroker{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: rootNamespace,
+					Name:      uuid.NewString(),
+				},
+				Spec: korifiv1alpha1.CFServiceBrokerSpec{
+					ServiceBroker: services.ServiceBroker{
+						Name: "my-service-broker",
+					},
+					Credentials: corev1.LocalObjectReference{
+						Name: "my-broker-secret",
+					},
+				},
+			}
+			Expect(adminClient.Create(ctx, serviceBroker)).To(Succeed())
+
+			serviceOffering = &korifiv1alpha1.CFServiceOffering{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      uuid.NewString(),
+					Namespace: rootNamespace,
+					Labels: map[string]string{
+						korifiv1alpha1.RelServiceBrokerGUIDLabel: serviceBroker.Name,
+					},
+				},
+				Spec: korifiv1alpha1.CFServiceOfferingSpec{
+					ServiceOffering: services.ServiceOffering{
+						BrokerCatalog: services.ServiceBrokerCatalog{
+							ID: "service-offering-id",
+						},
+					},
+				},
+			}
+			Expect(adminClient.Create(ctx, serviceOffering)).To(Succeed())
+
+			servicePlan = &korifiv1alpha1.CFServicePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      uuid.NewString(),
+					Namespace: rootNamespace,
+					Labels: map[string]string{
+						korifiv1alpha1.RelServiceBrokerGUIDLabel:   serviceBroker.Name,
+						korifiv1alpha1.RelServiceOfferingGUIDLabel: serviceOffering.Name,
+					},
+				},
+				Spec: korifiv1alpha1.CFServicePlanSpec{
+					Visibility: korifiv1alpha1.ServicePlanVisibility{
+						Type: "public",
+					},
+					ServicePlan: services.ServicePlan{
+						BrokerCatalog: services.ServicePlanBrokerCatalog{
+							ID: "service-plan-id",
+						},
+					},
+				},
+			}
+			Expect(adminClient.Create(ctx, servicePlan)).To(Succeed())
+
 			brokerClient = new(fake.BrokerClient)
 			brokerClientFactory.CreateClientReturns(brokerClient, nil)
 
@@ -581,14 +595,37 @@ var _ = Describe("CFServiceBinding", func() {
 				},
 			}, nil)
 
-			Expect(k8s.PatchResource(ctx, adminClient, instance, func() {
-				instance.Spec.Type = korifiv1alpha1.ManagedType
-				instance.Spec.PlanGUID = servicePlan.Name
-			})).To(Succeed())
+			instance = &korifiv1alpha1.CFServiceInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      instanceGUID,
+					Namespace: testNamespace,
+				},
+				Spec: korifiv1alpha1.CFServiceInstanceSpec{
+					DisplayName: "mongodb-service-instance-name",
+					Type:        "managed",
+					Tags:        []string{},
+					PlanGUID:    servicePlan.Name,
+				},
+			}
+			Expect(adminClient.Create(ctx, instance)).To(Succeed())
 		})
-		// check the secret is created
-		// check cfBinding.binding.Name is set
-		// the binding becomes re
+
+		It("sets the ObservedGeneration status field", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+				g.Expect(binding.Status.ObservedGeneration).To(Equal(binding.Generation))
+			}).Should(Succeed())
+		})
+
+		It("sets an owner reference from the instance to the binding", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+				g.Expect(binding.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
+					"Name": Equal(instance.Name),
+				})))
+			}).Should(Succeed())
+		})
+
 		It("binds the service", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(brokerClient.BindCallCount()).To(BeNumerically(">", 0))
@@ -599,8 +636,9 @@ var _ = Describe("CFServiceBinding", func() {
 					BindRequest: osbapi.BindRequest{
 						ServiceId: "service-offering-id",
 						PlanID:    "service-plan-id",
+						AppGUID:   cfApp.Name,
 						BindResource: osbapi.BindResource{
-							AppGUID: cfApp.Namespace + "/" + cfApp.Name,
+							AppGUID: cfApp.Name,
 						},
 						Parameters: map[string]any{},
 					},
@@ -624,7 +662,9 @@ var _ = Describe("CFServiceBinding", func() {
 				g.Expect(credentialsSecret.Data).To(MatchKeys(IgnoreExtras, Keys{
 					tools.CredentialsSecretKey: BeEquivalentTo(`{"foo":"bar"}`),
 				}))
-				// TODO: check the secret is onwed by the binding
+				g.Expect(credentialsSecret.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
+					"Name": Equal(binding.Name),
+				})))
 			}).Should(Succeed())
 		})
 
@@ -644,16 +684,34 @@ var _ = Describe("CFServiceBinding", func() {
 				g.Expect(bindingSecret.Data).To(MatchKeys(IgnoreExtras, Keys{
 					"foo": BeEquivalentTo("bar"),
 				}))
-				// TODO: check the secret is onwed by the binding
+
+				g.Expect(bindingSecret.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
+					"Name": Equal(binding.Name),
+				})))
 			}).Should(Succeed())
 		})
 
 		When("binding fails with the broker", func() {
-			It("fails the binding", func() {})
+			BeforeEach(func() {
+				brokerClient.BindReturns(osbapi.BindResponse{}, errors.New("binding-failed"))
+			})
+			It("fails the binding", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+					g.Expect(binding.Status.Conditions).To(ContainElements(
+						SatisfyAll(
+							HasType(Equal(korifiv1alpha1.StatusConditionReady)),
+							HasStatus(Equal(metav1.ConditionFalse)),
+						),
+						SatisfyAll(
+							HasType(Equal(korifiv1alpha1.BindingFailedCondition)),
+							HasStatus(Equal(metav1.ConditionTrue)),
+							HasReason(Equal("BindingFailed")),
+							HasMessage(ContainSubstring("binding-failed")),
+						),
+					))
+				}).Should(Succeed())
+			})
 		})
-
-		When("the broker credentials cannot be stored in the credentials secret", func() {
-			It("fails the binding", func() {})
-		}
 	})
 })

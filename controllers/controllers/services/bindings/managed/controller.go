@@ -3,17 +3,18 @@ package managed
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/osbapi"
 	"code.cloudfoundry.org/korifi/tools"
+	"code.cloudfoundry.org/korifi/tools/k8s"
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"code.cloudfoundry.org/korifi/controllers/controllers/services/credentials"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,25 +73,35 @@ func (r *ManagedCredentialsReconciler) ReconcileResource(ctx context.Context, cf
 		return ctrl.Result{}, fmt.Errorf("failed to create client for broker %q: %w", serviceBroker.Name, err)
 	}
 
-	var provisionResponse osbapi.BindResponse
-	provisionResponse, err = osbapiClient.Bind(ctx, osbapi.BindPayload{
+	var bindResponse osbapi.BindResponse
+	bindResponse, err = osbapiClient.Bind(ctx, osbapi.BindPayload{
 		BindingID:  cfServiceBinding.Name,
 		InstanceID: cfServiceInstance.Name,
 		BindRequest: osbapi.BindRequest{
 			ServiceId: serviceOffering.Spec.BrokerCatalog.ID,
 			PlanID:    servicePlan.Spec.BrokerCatalog.ID,
+			AppGUID:   cfServiceBinding.Spec.AppRef.Name,
 			BindResource: osbapi.BindResource{
-				AppGUID: cfServiceBinding.Namespace + "/" + cfServiceBinding.Spec.AppRef.Name,
+				AppGUID: cfServiceBinding.Spec.AppRef.Name,
 			},
 			Parameters: map[string]any{},
 		},
 	})
 	if err != nil {
 		log.Error(err, "failed to bind service")
-		return ctrl.Result{}, fmt.Errorf("failed to bind service: %w", err)
+
+		meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
+			Type:               korifiv1alpha1.BindingFailedCondition,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: cfServiceBinding.Generation,
+			LastTransitionTime: metav1.NewTime(time.Now()),
+			Reason:             "BindingFailed",
+			Message:            err.Error(),
+		})
+		return ctrl.Result{}, k8s.NewNotReadyError().WithReason("BindingFailed")
 	}
 
-	err = r.reconcileCredentials(ctx, cfServiceBinding, provisionResponse.Credentials)
+	err = r.reconcileCredentials(ctx, cfServiceBinding, bindResponse.Credentials)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -114,14 +125,13 @@ func (r *ManagedCredentialsReconciler) reconcileCredentials(ctx context.Context,
 		return controllerutil.SetControllerReference(cfServiceBinding, credentialsSecret, r.scheme)
 	})
 	if err != nil {
-		// TODO: fail the instance
 		return fmt.Errorf("failed to create credentials secret: %w", err)
 	}
 	cfServiceBinding.Status.Credentials.Name = credentialsSecret.Name
 
 	bindingSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      uuid.NewString(),
+			Name:      cfServiceBinding.Name + "-sbio",
 			Namespace: cfServiceBinding.Namespace,
 		},
 	}
@@ -135,8 +145,7 @@ func (r *ManagedCredentialsReconciler) reconcileCredentials(ctx context.Context,
 		return controllerutil.SetControllerReference(cfServiceBinding, bindingSecret, r.scheme)
 	})
 	if err != nil {
-		// fail the instance
-		return errors.Wrap(err, "failed to create binding secret")
+		return fmt.Errorf("failed to create binding secret: %w", err)
 	}
 
 	cfServiceBinding.Status.Binding.Name = bindingSecret.Name
