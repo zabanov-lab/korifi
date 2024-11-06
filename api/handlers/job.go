@@ -193,6 +193,16 @@ func (h *Job) handleStateJob(ctx context.Context, repository StateRepository, jo
 			presenter.StateComplete,
 			h.serverURL,
 		), nil
+	case model.CFResourceStateFailed:
+		return presenter.ForJob(job,
+			[]presenter.JobResponseError{{
+				Code:   10008,
+				Detail: fmt.Sprintf("%q %s with guid %s failed", job.Type, job.ResourceType, job.ResourceGUID),
+				Title:  "CF-UnprocessableEntity",
+			}},
+			presenter.StateFailed,
+			h.serverURL,
+		), nil
 
 	default:
 		return presenter.ForJob(job,

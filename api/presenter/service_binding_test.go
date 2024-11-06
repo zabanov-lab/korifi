@@ -39,13 +39,6 @@ var _ = Describe("Service Binding", func() {
 			},
 			CreatedAt: time.UnixMilli(1000),
 			UpdatedAt: tools.PtrTo(time.UnixMilli(2000)),
-			LastOperation: repositories.ServiceBindingLastOperation{
-				Type:        "hernia",
-				State:       "ruptured",
-				Description: tools.PtrTo("bad"),
-				CreatedAt:   time.UnixMilli(3000),
-				UpdatedAt:   tools.PtrTo(time.UnixMilli(4000)),
-			},
 		}
 	})
 
@@ -65,11 +58,11 @@ var _ = Describe("Service Binding", func() {
 				"created_at": "1970-01-01T00:00:01Z",
 				"updated_at": "1970-01-01T00:00:02Z",
 				"last_operation": {
-					"type": "hernia",
-					"state": "ruptured",
-					"description": "bad",
-					"created_at": "1970-01-01T00:00:03Z",
-					"updated_at": "1970-01-01T00:00:04Z"
+					"type": "update",
+					"state": "in progress",
+					"description": "",
+					"created_at": "1970-01-01T00:00:01Z",
+					"updated_at": "1970-01-01T00:00:02Z"
 				},
 				"relationships": {
 					"app": {

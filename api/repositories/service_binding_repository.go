@@ -67,8 +67,23 @@ type ServiceBindingRecord struct {
 	CreatedAt           time.Time
 	UpdatedAt           *time.Time
 	DeletedAt           *time.Time
-	LastOperation       ServiceBindingLastOperation
-	Ready               bool
+	State               RecordState
+}
+
+func (r *ServiceBindingRecord) GetCreatedAt() time.Time {
+	return r.CreatedAt
+}
+
+func (r *ServiceBindingRecord) GetUpdatedAt() *time.Time {
+	return r.UpdatedAt
+}
+
+func (r *ServiceBindingRecord) GetDeletedAt() *time.Time {
+	return r.DeletedAt
+}
+
+func (r *ServiceBindingRecord) GetState() RecordState {
+	return r.State
 }
 
 func (r ServiceBindingRecord) Relationships() map[string]string {
@@ -76,14 +91,6 @@ func (r ServiceBindingRecord) Relationships() map[string]string {
 		"app":              r.AppGUID,
 		"service_instance": r.ServiceInstanceGUID,
 	}
-}
-
-type ServiceBindingLastOperation struct {
-	Type        string
-	State       string
-	Description *string
-	CreatedAt   time.Time
-	UpdatedAt   *time.Time
 }
 
 type CreateServiceBindingMessage struct {
@@ -240,8 +247,27 @@ func serviceBindingToRecord(binding korifiv1alpha1.CFServiceBinding) ServiceBind
 		CreatedAt:           binding.CreationTimestamp.Time,
 		UpdatedAt:           getLastUpdatedTime(&binding),
 		DeletedAt:           golangTime(binding.DeletionTimestamp),
-		LastOperation:       serviceBindingRecordLastOperation(binding),
-		Ready:               isBindingReady(binding),
+		State:               computeBindingState(binding),
+	}
+}
+
+func computeBindingState(binding korifiv1alpha1.CFServiceBinding) RecordState {
+	bindingFailed, details := isBindingFailed(binding)
+	if bindingFailed {
+		return RecordState{
+			Value:       model.CFResourceStateFailed,
+			Description: details,
+		}
+	}
+
+	if isBindingReady(binding) {
+		return RecordState{
+			Value: model.CFResourceStateReady,
+		}
+	}
+
+	return RecordState{
+		Value: model.CFResourceStateUnknown,
 	}
 }
 
@@ -253,51 +279,64 @@ func isBindingReady(binding korifiv1alpha1.CFServiceBinding) bool {
 	return meta.IsStatusConditionTrue(binding.Status.Conditions, korifiv1alpha1.StatusConditionReady)
 }
 
-func serviceBindingRecordLastOperation(binding korifiv1alpha1.CFServiceBinding) ServiceBindingLastOperation {
-	if binding.DeletionTimestamp != nil {
-		return ServiceBindingLastOperation{
-			Type:      "delete",
-			State:     "in progress",
-			CreatedAt: binding.DeletionTimestamp.Time,
-			UpdatedAt: getLastUpdatedTime(&binding),
-		}
+func isBindingFailed(binding korifiv1alpha1.CFServiceBinding) (bool, string) {
+	if binding.Generation != binding.Status.ObservedGeneration {
+		return false, ""
 	}
 
-	readyCondition := meta.FindStatusCondition(binding.Status.Conditions, korifiv1alpha1.StatusConditionReady)
-	if readyCondition == nil {
-		return ServiceBindingLastOperation{
-			Type:      "create",
-			State:     "initial",
-			CreatedAt: binding.CreationTimestamp.Time,
-			UpdatedAt: getLastUpdatedTime(&binding),
-		}
+	failedCondition := meta.FindStatusCondition(binding.Status.Conditions, korifiv1alpha1.BindingFailedCondition)
+	if failedCondition == nil {
+		return false, ""
 	}
-
-	if readyCondition.Status == metav1.ConditionTrue {
-		return ServiceBindingLastOperation{
-			Type:      "create",
-			State:     "succeeded",
-			CreatedAt: binding.CreationTimestamp.Time,
-			UpdatedAt: getLastUpdatedTime(&binding),
-		}
-	}
-
-	if meta.IsStatusConditionTrue(binding.Status.Conditions, korifiv1alpha1.BindingFailedCondition) {
-		return ServiceBindingLastOperation{
-			Type:      "create",
-			State:     "failed",
-			CreatedAt: binding.CreationTimestamp.Time,
-			UpdatedAt: tools.PtrTo(readyCondition.LastTransitionTime.Time),
-		}
-	}
-
-	return ServiceBindingLastOperation{
-		Type:      "create",
-		State:     "in progress",
-		CreatedAt: binding.CreationTimestamp.Time,
-		UpdatedAt: tools.PtrTo(readyCondition.LastTransitionTime.Time),
-	}
+	return failedCondition.Status == metav1.ConditionTrue, failedCondition.Message
 }
+
+// TODO: remove
+// func serviceBindingRecordLastOperation(binding korifiv1alpha1.CFServiceBinding) ServiceBindingLastOperation {
+// 	if binding.DeletionTimestamp != nil {
+// 		return ServiceBindingLastOperation{
+// 			Type:      "delete",
+// 			State:     "in progress",
+// 			CreatedAt: binding.DeletionTimestamp.Time,
+// 			UpdatedAt: getLastUpdatedTime(&binding),
+// 		}
+// 	}
+
+// 	readyCondition := meta.FindStatusCondition(binding.Status.Conditions, korifiv1alpha1.StatusConditionReady)
+// 	if readyCondition == nil {
+// 		return ServiceBindingLastOperation{
+// 			Type:      "create",
+// 			State:     "initial",
+// 			CreatedAt: binding.CreationTimestamp.Time,
+// 			UpdatedAt: getLastUpdatedTime(&binding),
+// 		}
+// 	}
+
+// 	if readyCondition.Status == metav1.ConditionTrue {
+// 		return ServiceBindingLastOperation{
+// 			Type:      "create",
+// 			State:     "succeeded",
+// 			CreatedAt: binding.CreationTimestamp.Time,
+// 			UpdatedAt: getLastUpdatedTime(&binding),
+// 		}
+// 	}
+
+// 	if meta.IsStatusConditionTrue(binding.Status.Conditions, korifiv1alpha1.BindingFailedCondition) {
+// 		return ServiceBindingLastOperation{
+// 			Type:      "create",
+// 			State:     "failed",
+// 			CreatedAt: binding.CreationTimestamp.Time,
+// 			UpdatedAt: tools.PtrTo(readyCondition.LastTransitionTime.Time),
+// 		}
+// 	}
+
+// 	return ServiceBindingLastOperation{
+// 		Type:      "create",
+// 		State:     "in progress",
+// 		CreatedAt: binding.CreationTimestamp.Time,
+// 		UpdatedAt: tools.PtrTo(readyCondition.LastTransitionTime.Time),
+// 	}
+// }
 
 func (r *ServiceBindingRepo) UpdateServiceBinding(ctx context.Context, authInfo authorization.Info, updateMsg UpdateServiceBindingMessage) (ServiceBindingRecord, error) {
 	userClient, err := r.userClientFactory.BuildClient(authInfo)
@@ -338,11 +377,7 @@ func (r *ServiceBindingRepo) GetState(ctx context.Context, authInfo authorizatio
 		return model.CFResourceStateUnknown, err
 	}
 
-	if bindingRecord.Ready {
-		return model.CFResourceStateReady, nil
-	}
-
-	return model.CFResourceStateUnknown, nil
+	return bindingRecord.State.Value, nil
 }
 
 func (r *ServiceBindingRepo) GetDeletedAt(ctx context.Context, authInfo authorization.Info, bindingGUID string) (*time.Time, error) {

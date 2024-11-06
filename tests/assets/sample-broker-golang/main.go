@@ -122,7 +122,7 @@ func serviceBindingLastOperationHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	fmt.Fprint(w, `{"state":"succeeded"}`)
+	fmt.Fprint(w, `{"state":"failed","description":"binding just failed"}`)
 }
 
 func getServiceBindingHandler(w http.ResponseWriter, r *http.Request) {

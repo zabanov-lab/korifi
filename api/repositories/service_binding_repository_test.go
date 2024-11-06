@@ -103,6 +103,16 @@ var _ = Describe("ServiceBindingRepo", func() {
 			Expect(
 				k8sClient.Create(ctx, cfServiceBinding),
 			).To(Succeed())
+
+			Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
+				meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
+					Type:    korifiv1alpha1.StatusConditionReady,
+					Status:  metav1.ConditionTrue,
+					Message: "Ready",
+					Reason:  "Ready",
+				})
+				cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
+			})).To(Succeed())
 		})
 
 		JustBeforeEach(func() {
@@ -118,41 +128,9 @@ var _ = Describe("ServiceBindingRepo", func() {
 				createRoleBinding(ctx, userName, adminRole.Name, cfServiceBinding.Namespace)
 			})
 
-			It("returns unknown state", func() {
+			It("returns the state", func() {
 				Expect(stateErr).NotTo(HaveOccurred())
-				Expect(state).To(Equal(model.CFResourceStateUnknown))
-			})
-
-			When("the service binding is ready", func() {
-				BeforeEach(func() {
-					Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
-						meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-							Type:    korifiv1alpha1.StatusConditionReady,
-							Status:  metav1.ConditionTrue,
-							Message: "Ready",
-							Reason:  "Ready",
-						})
-						cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
-					})).To(Succeed())
-				})
-
-				It("returns ready state", func() {
-					Expect(stateErr).NotTo(HaveOccurred())
-					Expect(state).To(Equal(model.CFResourceStateReady))
-				})
-
-				When("the ready status is stale ", func() {
-					BeforeEach(func() {
-						Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
-							cfServiceBinding.Status.ObservedGeneration = -1
-						})).To(Succeed())
-					})
-
-					It("returns unknown state", func() {
-						Expect(stateErr).NotTo(HaveOccurred())
-						Expect(state).To(Equal(model.CFResourceStateUnknown))
-					})
-				})
+				Expect(state).To(Equal(model.CFResourceStateReady))
 			})
 		})
 	})
@@ -354,7 +332,7 @@ var _ = Describe("ServiceBindingRepo", func() {
 		})
 	})
 
-	Describe("binding record last operation", func() {
+	Describe("binding record state", func() {
 		var (
 			cfServiceBinding     *korifiv1alpha1.CFServiceBinding
 			serviceBindingRecord repositories.ServiceBindingRecord
@@ -389,11 +367,10 @@ var _ = Describe("ServiceBindingRepo", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("returns initial last operation", func() {
-			Expect(serviceBindingRecord.LastOperation.Type).To(Equal("create"))
-			Expect(serviceBindingRecord.LastOperation.State).To(Equal("initial"))
-			Expect(serviceBindingRecord.LastOperation.CreatedAt).To(Equal(serviceBindingRecord.CreatedAt))
-			Expect(serviceBindingRecord.LastOperation.UpdatedAt).To(PointTo(Equal(serviceBindingRecord.CreatedAt)))
+		It("returns unknown state", func() {
+			Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+				Value: model.CFResourceStateUnknown,
+			}))
 		})
 
 		When("the binding is being deleted", func() {
@@ -405,75 +382,94 @@ var _ = Describe("ServiceBindingRepo", func() {
 				Expect(k8sClient.Delete(ctx, cfServiceBinding)).To(Succeed())
 			})
 
-			It("returns delete last operation", func() {
-				Expect(serviceBindingRecord.LastOperation.Type).To(Equal("delete"))
-				Expect(serviceBindingRecord.LastOperation.State).To(Equal("in progress"))
-				Expect(serviceBindingRecord.LastOperation.CreatedAt).To(BeTemporally("~", time.Now(), 5*time.Second))
+			It("returns unknown state", func() {
+				Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
 			})
 		})
 
 		When("binding has succeeded", func() {
 			BeforeEach(func() {
 				Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
+					cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
 					meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-						Type:               korifiv1alpha1.StatusConditionReady,
-						Status:             metav1.ConditionTrue,
-						LastTransitionTime: metav1.NewTime(time.UnixMilli(1000)),
-						Reason:             "Ready",
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "Ready",
 					})
 				})).To(Succeed())
 			})
 
-			It("returns succeeded last operation", func() {
-				Expect(serviceBindingRecord.LastOperation.Type).To(Equal("create"))
-				Expect(serviceBindingRecord.LastOperation.State).To(Equal("succeeded"))
-				Expect(serviceBindingRecord.LastOperation.CreatedAt).To(Equal(serviceBindingRecord.CreatedAt))
-				Expect(serviceBindingRecord.LastOperation.UpdatedAt).To(Equal(serviceBindingRecord.UpdatedAt))
+			It("returns ready state", func() {
+				Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateReady,
+				}))
 			})
 		})
 
 		When("binding is in progress", func() {
 			BeforeEach(func() {
 				Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
+					cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
 					meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-						Type:               korifiv1alpha1.StatusConditionReady,
-						Status:             metav1.ConditionFalse,
-						LastTransitionTime: metav1.NewTime(time.UnixMilli(1000)),
-						Reason:             "NotReady",
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionFalse,
+						Reason: "NotReady",
 					})
 				})).To(Succeed())
 			})
 
-			It("returns in progress last operation", func() {
-				Expect(serviceBindingRecord.LastOperation.Type).To(Equal("create"))
-				Expect(serviceBindingRecord.LastOperation.State).To(Equal("in progress"))
-				Expect(serviceBindingRecord.LastOperation.CreatedAt).To(Equal(serviceBindingRecord.CreatedAt))
-				Expect(serviceBindingRecord.LastOperation.UpdatedAt).To(PointTo(Equal(time.UnixMilli(1000))))
+			It("returns unknown state", func() {
+				Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
 			})
 		})
 
 		When("binding has failed", func() {
 			BeforeEach(func() {
 				Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
+					cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation
 					meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-						Type:               korifiv1alpha1.StatusConditionReady,
-						Status:             metav1.ConditionFalse,
-						LastTransitionTime: metav1.NewTime(time.UnixMilli(2000)),
-						Reason:             "Failed",
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionFalse,
+						Reason: "Failed",
 					})
 
 					meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-						Type:   korifiv1alpha1.BindingFailedCondition,
-						Status: metav1.ConditionTrue,
-						Reason: "Failed",
+						Type:    korifiv1alpha1.BindingFailedCondition,
+						Status:  metav1.ConditionTrue,
+						Reason:  "Failed",
+						Message: "binding has failed",
 					})
 				})).To(Succeed())
 			})
-			It("returns failed last operation", func() {
-				Expect(serviceBindingRecord.LastOperation.Type).To(Equal("create"))
-				Expect(serviceBindingRecord.LastOperation.State).To(Equal("failed"))
-				Expect(serviceBindingRecord.LastOperation.CreatedAt).To(Equal(serviceBindingRecord.CreatedAt))
-				Expect(serviceBindingRecord.LastOperation.UpdatedAt).To(PointTo(Equal(time.UnixMilli(2000))))
+
+			It("returns failed state", func() {
+				Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+					Value:       model.CFResourceStateFailed,
+					Description: "binding has failed",
+				}))
+			})
+		})
+
+		When("binding status is outdated", func() {
+			BeforeEach(func() {
+				Expect(k8s.Patch(ctx, k8sClient, cfServiceBinding, func() {
+					cfServiceBinding.Status.ObservedGeneration = cfServiceBinding.Generation + 1
+					meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "Ready",
+					})
+				})).To(Succeed())
+			})
+
+			It("returns unknown state", func() {
+				Expect(serviceBindingRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
 			})
 		})
 	})

@@ -7,6 +7,7 @@ import (
 
 	"code.cloudfoundry.org/korifi/api/presenter"
 	"code.cloudfoundry.org/korifi/api/repositories"
+	"code.cloudfoundry.org/korifi/model"
 	. "code.cloudfoundry.org/korifi/tests/matchers"
 	"code.cloudfoundry.org/korifi/tools"
 	. "github.com/onsi/ginkgo/v2"
@@ -38,6 +39,9 @@ var _ = Describe("Service Instance", func() {
 			},
 			Annotations: map[string]string{
 				"one": "two",
+			},
+			State: repositories.RecordState{
+				Value: model.CFResourceStateReady,
 			},
 		}
 	})
@@ -74,7 +78,7 @@ var _ = Describe("Service Instance", func() {
 			"last_operation": {
 				"created_at": "1970-01-01T00:00:01Z",
 				"updated_at": "1970-01-01T00:00:02Z",
-				"description": "Operation succeeded",
+				"description": "",
 				"state": "succeeded",
 				"type": "update"
 			},

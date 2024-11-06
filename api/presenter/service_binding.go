@@ -15,23 +15,15 @@ const (
 )
 
 type ServiceBindingResponse struct {
-	GUID          string                              `json:"guid"`
-	Type          string                              `json:"type"`
-	Name          *string                             `json:"name"`
-	CreatedAt     string                              `json:"created_at"`
-	UpdatedAt     string                              `json:"updated_at"`
-	LastOperation ServiceBindingLastOperationResponse `json:"last_operation"`
-	Relationships map[string]model.ToOneRelationship  `json:"relationships"`
-	Links         ServiceBindingLinks                 `json:"links"`
-	Metadata      Metadata                            `json:"metadata"`
-}
-
-type ServiceBindingLastOperationResponse struct {
-	Type        string  `json:"type"`
-	State       string  `json:"state"`
-	Description *string `json:"description"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	GUID          string                             `json:"guid"`
+	Type          string                             `json:"type"`
+	Name          *string                            `json:"name"`
+	CreatedAt     string                             `json:"created_at"`
+	UpdatedAt     string                             `json:"updated_at"`
+	LastOperation LastOperationResponse              `json:"last_operation"`
+	Relationships map[string]model.ToOneRelationship `json:"relationships"`
+	Links         ServiceBindingLinks                `json:"links"`
+	Metadata      Metadata                           `json:"metadata"`
 }
 
 type ServiceBindingLinks struct {
@@ -43,18 +35,12 @@ type ServiceBindingLinks struct {
 
 func ForServiceBinding(record repositories.ServiceBindingRecord, baseURL url.URL) ServiceBindingResponse {
 	return ServiceBindingResponse{
-		GUID:      record.GUID,
-		Type:      record.Type,
-		Name:      record.Name,
-		CreatedAt: formatTimestamp(&record.CreatedAt),
-		UpdatedAt: formatTimestamp(record.UpdatedAt),
-		LastOperation: ServiceBindingLastOperationResponse{
-			Type:        record.LastOperation.Type,
-			State:       record.LastOperation.State,
-			Description: record.LastOperation.Description,
-			CreatedAt:   formatTimestamp(&record.LastOperation.CreatedAt),
-			UpdatedAt:   formatTimestamp(record.LastOperation.UpdatedAt),
-		},
+		GUID:          record.GUID,
+		Type:          record.Type,
+		Name:          record.Name,
+		CreatedAt:     formatTimestamp(&record.CreatedAt),
+		UpdatedAt:     formatTimestamp(record.UpdatedAt),
+		LastOperation: ForLastOperation(&record),
 		Relationships: ForRelationships(record.Relationships()),
 		Links: ServiceBindingLinks{
 			App: Link{

@@ -7,6 +7,7 @@ type CFResourceState int
 const (
 	CFResourceStateUnknown CFResourceState = iota
 	CFResourceStateReady
+	CFResourceStateFailed
 )
 
 type CFResource struct {

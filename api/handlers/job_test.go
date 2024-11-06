@@ -190,6 +190,23 @@ var _ = Describe("Job", func() {
 			})
 		})
 
+		When("the resource state is Failed", func() {
+			BeforeEach(func() {
+				stateRepo.GetStateReturns(model.CFResourceStateFailed, nil)
+			})
+
+			It("returns a failed status", func() {
+				Expect(rr).To(HaveHTTPBody(SatisfyAll(
+					MatchJSONPath("$.state", "FAILED"),
+					MatchJSONPath("$.errors", ConsistOf(map[string]interface{}{
+						"code":   float64(10008),
+						"detail": `"testing.state" Testing with guid my-resource-guid failed`,
+						"title":  "CF-UnprocessableEntity",
+					})),
+				)))
+			})
+		})
+
 		When("the user does not have permission to see the resource", func() {
 			BeforeEach(func() {
 				stateRepo.GetStateReturns(model.CFResourceStateUnknown, fmt.Errorf("wrapped err: %w", apierrors.NewForbiddenError(nil, "foo")))

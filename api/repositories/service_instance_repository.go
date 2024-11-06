@@ -181,7 +181,23 @@ type ServiceInstanceRecord struct {
 	CreatedAt   time.Time
 	UpdatedAt   *time.Time
 	DeletedAt   *time.Time
-	Ready       bool
+	State       RecordState
+}
+
+func (r *ServiceInstanceRecord) GetCreatedAt() time.Time {
+	return r.CreatedAt
+}
+
+func (r *ServiceInstanceRecord) GetUpdatedAt() *time.Time {
+	return r.UpdatedAt
+}
+
+func (r *ServiceInstanceRecord) GetDeletedAt() *time.Time {
+	return r.DeletedAt
+}
+
+func (r *ServiceInstanceRecord) GetState() RecordState {
+	return r.State
 }
 
 func (r ServiceInstanceRecord) Relationships() map[string]string {
@@ -486,11 +502,7 @@ func (r *ServiceInstanceRepo) GetState(ctx context.Context, authInfo authorizati
 		return model.CFResourceStateUnknown, err
 	}
 
-	if instanceRecord.Ready {
-		return model.CFResourceStateReady, nil
-	}
-
-	return model.CFResourceStateUnknown, nil
+	return instanceRecord.State.Value, nil
 }
 
 func (r *ServiceInstanceRepo) GetDeletedAt(ctx context.Context, authInfo authorization.Info, instanceGUID string) (*time.Time, error) {
@@ -515,7 +527,27 @@ func cfServiceInstanceToRecord(cfServiceInstance korifiv1alpha1.CFServiceInstanc
 		CreatedAt:   cfServiceInstance.CreationTimestamp.Time,
 		UpdatedAt:   getLastUpdatedTime(&cfServiceInstance),
 		DeletedAt:   golangTime(cfServiceInstance.DeletionTimestamp),
-		Ready:       isInstanceReady(cfServiceInstance),
+		State:       computeInstanceState(cfServiceInstance),
+	}
+}
+
+func computeInstanceState(instance korifiv1alpha1.CFServiceInstance) RecordState {
+	instanceFailed, details := isInstanceFailed(instance)
+	if instanceFailed {
+		return RecordState{
+			Value:       model.CFResourceStateFailed,
+			Description: details,
+		}
+	}
+
+	if isInstanceReady(instance) {
+		return RecordState{
+			Value: model.CFResourceStateReady,
+		}
+	}
+
+	return RecordState{
+		Value: model.CFResourceStateUnknown,
 	}
 }
 
@@ -525,4 +557,12 @@ func isInstanceReady(cfServiceInstance korifiv1alpha1.CFServiceInstance) bool {
 	}
 
 	return meta.IsStatusConditionTrue(cfServiceInstance.Status.Conditions, korifiv1alpha1.StatusConditionReady)
+}
+
+func isInstanceFailed(cfServiceInstance korifiv1alpha1.CFServiceInstance) (bool, string) {
+	failedCondition := meta.FindStatusCondition(cfServiceInstance.Status.Conditions, korifiv1alpha1.ProvisioningFailedCondition)
+	if failedCondition == nil {
+		return false, ""
+	}
+	return failedCondition.Status == metav1.ConditionTrue, failedCondition.Message
 }

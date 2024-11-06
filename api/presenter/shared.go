@@ -10,6 +10,8 @@ import (
 	"github.com/BooleanCat/go-functional/v2/it"
 )
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
+
 type Lifecycle struct {
 	Type string        `json:"type"`
 	Data LifecycleData `json:"data"`

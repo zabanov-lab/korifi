@@ -1025,6 +1025,141 @@ var _ = Describe("ServiceInstanceRepository", func() {
 			})
 		})
 	})
+
+	Describe("instance record state", func() {
+		var (
+			cfServiceInstance     *korifiv1alpha1.CFServiceInstance
+			serviceInstanceRecord repositories.ServiceInstanceRecord
+		)
+
+		BeforeEach(func() {
+			createRoleBinding(ctx, userName, spaceDeveloperRole.Name, space.Name)
+			cfServiceInstance = &korifiv1alpha1.CFServiceInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      uuid.NewString(),
+					Namespace: space.Name,
+				},
+				Spec: korifiv1alpha1.CFServiceInstanceSpec{
+					Type: korifiv1alpha1.UserProvidedType,
+				},
+			}
+			Expect(
+				k8sClient.Create(ctx, cfServiceInstance),
+			).To(Succeed())
+		})
+
+		JustBeforeEach(func() {
+			var err error
+			serviceInstanceRecord, err = serviceInstanceRepo.GetServiceInstance(ctx, authInfo, cfServiceInstance.Name)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns unknown state", func() {
+			Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+				Value: model.CFResourceStateUnknown,
+			}))
+		})
+
+		When("the instance is being deleted", func() {
+			BeforeEach(func() {
+				Expect(k8s.PatchResource(ctx, k8sClient, cfServiceInstance, func() {
+					cfServiceInstance.Finalizers = append(cfServiceInstance.Finalizers, "do-not-delete-me")
+				})).To(Succeed())
+
+				Expect(k8sClient.Delete(ctx, cfServiceInstance)).To(Succeed())
+			})
+
+			It("returns unknown state", func() {
+				Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
+			})
+		})
+
+		When("instance has succeeded", func() {
+			BeforeEach(func() {
+				Expect(k8s.Patch(ctx, k8sClient, cfServiceInstance, func() {
+					cfServiceInstance.Status.ObservedGeneration = cfServiceInstance.Generation
+					meta.SetStatusCondition(&cfServiceInstance.Status.Conditions, metav1.Condition{
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "Ready",
+					})
+				})).To(Succeed())
+			})
+
+			It("returns ready state", func() {
+				Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateReady,
+				}))
+			})
+		})
+
+		When("instance is in progress", func() {
+			BeforeEach(func() {
+				Expect(k8s.Patch(ctx, k8sClient, cfServiceInstance, func() {
+					cfServiceInstance.Status.ObservedGeneration = cfServiceInstance.Generation
+					meta.SetStatusCondition(&cfServiceInstance.Status.Conditions, metav1.Condition{
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionFalse,
+						Reason: "NotReady",
+					})
+				})).To(Succeed())
+			})
+
+			It("returns unknown state", func() {
+				Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
+			})
+		})
+
+		When("instance has failed", func() {
+			BeforeEach(func() {
+				Expect(k8s.Patch(ctx, k8sClient, cfServiceInstance, func() {
+					cfServiceInstance.Status.ObservedGeneration = cfServiceInstance.Generation
+					meta.SetStatusCondition(&cfServiceInstance.Status.Conditions, metav1.Condition{
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionFalse,
+						Reason: "Failed",
+					})
+
+					meta.SetStatusCondition(&cfServiceInstance.Status.Conditions, metav1.Condition{
+						Type:    korifiv1alpha1.ProvisioningFailedCondition,
+						Status:  metav1.ConditionTrue,
+						Reason:  "Failed",
+						Message: "instance has failed",
+					})
+				})).To(Succeed())
+			})
+
+			It("returns failed state", func() {
+				Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+					Value:       model.CFResourceStateFailed,
+					Description: "instance has failed",
+				}))
+			})
+		})
+
+		When("instance status is outdated", func() {
+			BeforeEach(func() {
+				Expect(k8s.Patch(ctx, k8sClient, cfServiceInstance, func() {
+					cfServiceInstance.Status.ObservedGeneration = cfServiceInstance.Generation + 1
+					meta.SetStatusCondition(&cfServiceInstance.Status.Conditions, metav1.Condition{
+						Type:   korifiv1alpha1.StatusConditionReady,
+						Status: metav1.ConditionTrue,
+						Reason: "Ready",
+					})
+				})).To(Succeed())
+			})
+
+			It("returns unknown state", func() {
+				Expect(serviceInstanceRecord.State).To(Equal(repositories.RecordState{
+					Value: model.CFResourceStateUnknown,
+				}))
+			})
+		})
+	})
 })
 
 var _ = DescribeTable("ServiceInstanceSorter",
