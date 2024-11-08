@@ -55,12 +55,8 @@ type CFServiceBindingStatus struct {
 	// +optional
 	Binding v1.LocalObjectReference `json:"binding"`
 
-	// The
-	// [operation](https://github.com/openservicebrokerapi/servicebroker/blob/master/spec.md#binding)
-	// of the bind request to the the OSBAPI broker. Only makes sense for
-	// bindings to managed service instances
 	// +optional
-	BindingOperation string `json:"bindingOperation"`
+	LastOperation LastOperation `json:"last_operation"`
 
 	// The
 	// [operation](https://github.com/openservicebrokerapi/servicebroker/blob/master/spec.md#unbinding)
@@ -82,6 +78,12 @@ type CFServiceBindingStatus struct {
 
 	// ObservedGeneration captures the latest generation of the CFServiceBinding that has been reconciled
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+type LastOperation struct {
+	ID          string `json:""`
+	State       string `json:"state"`
+	Description string `json:"description"`
 }
 
 //+kubebuilder:object:root=true

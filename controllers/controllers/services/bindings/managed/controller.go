@@ -123,10 +123,15 @@ func (r *ManagedBindingsReconciler) requestBind(
 			Message:            err.Error(),
 		})
 
+		cfServiceBinding.Status.LastOperation.State = "filed"
+		cfServiceBinding.Status.LastOperation.Description = "bining failed"
 		return nil, k8s.NewNotReadyError().WithReason("BindingFailed")
 	}
 
-	cfServiceBinding.Status.BindingOperation = bindResponse.Operation
+	cfServiceBinding.Status.LastOperation = korifiv1alpha1.LastOperation{
+		ID: bindResponse.Operation,
+	}
+
 	meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
 		Type:               korifiv1alpha1.BindingRequestedCondition,
 		Status:             metav1.ConditionTrue,
@@ -136,6 +141,8 @@ func (r *ManagedBindingsReconciler) requestBind(
 	})
 
 	if bindResponse.Complete {
+		cfServiceBinding.Status.LastOperation.State = "succeeded"
+		cfServiceBinding.Status.LastOperation.Description = "Operation succeeded"
 		return bindResponse.Credentials, nil
 	}
 
@@ -156,30 +163,39 @@ func (r *ManagedBindingsReconciler) pollBindOperation(
 		GetLastOperationRequestParameters: osbapi.GetLastOperationRequestParameters{
 			ServiceId: assets.ServiceOffering.Spec.BrokerCatalog.ID,
 			PlanID:    assets.ServicePlan.Spec.BrokerCatalog.ID,
-			Operation: cfServiceBinding.Status.BindingOperation,
+			Operation: cfServiceBinding.Status.LastOperation.ID,
 		},
 	})
 	if err != nil {
-		log.Error(err, "failed to get last operation", "operation", cfServiceBinding.Status.BindingOperation)
+		cfServiceBinding.Status.LastOperation.State = "failed"
+		cfServiceBinding.Status.LastOperation.Description = fmt.Sprintf("Polling last operation failed for operatio id %q", cfServiceBinding.Status.LastOperation.ID)
+		log.Error(err, "failed to get last operation", "operation", cfServiceBinding.Status.LastOperation.ID)
 		return nil, k8s.NewNotReadyError().WithCause(err).WithReason("GetLastOperationFailed")
 	}
-	if lastOperation.State == "in progress" {
-		log.Info("binding operation in progress", "operation", cfServiceBinding.Status.BindingOperation)
+
+	cfServiceBinding.Status.LastOperation.State = lastOperation.State
+	cfServiceBinding.Status.LastOperation.Description = lastOperation.Description
+
+	if lastOperation.State != "succeeded" {
 		return nil, k8s.NewNotReadyError().WithReason("BindingInProgress").WithRequeue()
 	}
+	// if lastOperation.State == "in progress" {
+	// 	log.Info("binding operation in progress", "operation", cfServiceBinding.Status.LastOperation.ID)
+	// 	return nil, k8s.NewNotReadyError().WithReason("BindingInProgress").WithRequeue()
+	// }
 
-	if lastOperation.State == "failed" {
-		log.Error(nil, "last operation has failed", "operation", cfServiceBinding.Status.BindingOperation, "description", lastOperation.Description)
-		meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
-			Type:               korifiv1alpha1.BindingFailedCondition,
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: cfServiceBinding.Generation,
-			LastTransitionTime: metav1.NewTime(time.Now()),
-			Reason:             "BindingFailed",
-			Message:            lastOperation.Description,
-		})
-		return nil, k8s.NewNotReadyError().WithReason("BindingFailed")
-	}
+	// if lastOperation.State == "failed" {
+	// 	log.Error(nil, "last operation has failed", "operation", cfServiceBinding.Status.LastOperation.ID, "description", lastOperation.Description)
+	// 	meta.SetStatusCondition(&cfServiceBinding.Status.Conditions, metav1.Condition{
+	// 		Type:               korifiv1alpha1.BindingFailedCondition,
+	// 		Status:             metav1.ConditionTrue,
+	// 		ObservedGeneration: cfServiceBinding.Generation,
+	// 		LastTransitionTime: metav1.NewTime(time.Now()),
+	// 		Reason:             "BindingFailed",
+	// 		Message:            lastOperation.Description,
+	// 	})
+	// 	return nil, k8s.NewNotReadyError().WithReason("BindingFailed")
+	// }
 
 	binding, err := osbapiClient.GetServiceBinding(ctx, osbapi.GetServiceBindingRequest{
 		InstanceID: cfServiceBinding.Spec.Service.Name,
