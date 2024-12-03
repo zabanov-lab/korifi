@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	"fmt"
 
-	"code.cloudfoundry.org/korifi/model/services"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -29,9 +28,11 @@ const (
 	UserProvidedType = "user-provided"
 	ManagedType      = "managed"
 
-	CFManagedServiceInstanceFinalizerName = "managed.cfServiceInstance.korifi.cloudfoundry.org"
+	CFServiceInstanceFinalizerName = "cfServiceInstance.korifi.cloudfoundry.org"
 
-	ProvisioningFailedCondition = "ProvisioningFailed"
+	ProvisionRequestedCondition   = "ProvisionRequested"
+	ProvisioningFailedCondition   = "ProvisioningFailed"
+	DeprovisionRequestedCondition = "DeprovisionRequested"
 )
 
 // CFServiceInstanceSpec defines the desired state of CFServiceInstance
@@ -81,15 +82,21 @@ type CFServiceInstanceStatus struct {
 	//+kubebuilder:validation:Optional
 	CredentialsObservedVersion string `json:"credentialsObservedVersion,omitempty"`
 
+	// The operation returned by the OSBAPI broker when instance provisioning
+	// is requested. Only makes sense for managed service instances
 	//+kubebuilder:validation:Optional
-	LastOperation services.LastOperation `json:"last_operation"`
+	ProvisionOperation string `json:"provisionOperation,omitempty"`
+
+	// The operation returned by the OSBAPI broker when instance deprovisioning
+	// is requested. Only makes sense for managed service instances
+	//+kubebuilder:validation:Optional
+	DeprovisionOperation string `json:"deprovisionOperation,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.displayName`
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // CFServiceInstance is the Schema for the cfserviceinstances API
 type CFServiceInstance struct {
@@ -115,7 +122,6 @@ func (si *CFServiceInstance) StatusConditions() *[]metav1.Condition {
 }
 
 //+kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // CFServiceInstanceList contains a list of CFServiceInstance
 type CFServiceInstanceList struct {

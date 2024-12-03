@@ -110,6 +110,11 @@ func (r *Reconciler) ReconcileResource(ctx context.Context, cfServiceInstance *k
 	cfServiceInstance.Status.ObservedGeneration = cfServiceInstance.Generation
 	log.V(1).Info("set observed generation", "generation", cfServiceInstance.Status.ObservedGeneration)
 
+	if !cfServiceInstance.GetDeletionTimestamp().IsZero() {
+		controllerutil.RemoveFinalizer(cfServiceInstance, korifiv1alpha1.CFServiceInstanceFinalizerName)
+		log.V(1).Info("finalizer removed")
+	}
+
 	credentialsSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: cfServiceInstance.Namespace,
