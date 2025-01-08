@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -108,6 +109,16 @@ func bindHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Credentials check failed: %v", err)
 		return
 	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "failed to read body: %v", err)
+		return
+
+	}
+
+	fmt.Printf("Bind request body: %v\n", string(bodyBytes))
 
 	w.WriteHeader(http.StatusAccepted)
 	fmt.Fprint(w, `{

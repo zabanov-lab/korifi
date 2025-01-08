@@ -552,13 +552,15 @@ var _ = Describe("CFServiceBinding", func() {
 			Expect(adminClient.Create(ctx, servicePlan)).To(Succeed())
 
 			brokerClient = new(fake.BrokerClient)
+			brokerClient.BindReturns(osbapi.BindResponse{}, errors.New("bind not stubbed yet"))
+			brokerClient.GetServiceBindingLastOperationReturns(osbapi.LastOperationResponse{}, errors.New("bind last operation not stubbed yet"))
 			brokerClientFactory.CreateClientReturns(brokerClient, nil)
 
-			brokerClient.BindReturns(osbapi.BindResponse{
-				Credentials: map[string]any{
-					"foo": "bar",
-				},
-			}, nil)
+			// brokerClient.BindReturns(osbapi.BindResponse{
+			// 	Credentials: map[string]any{
+			// 		"foo": "bar",
+			// 	},
+			// }, nil)
 
 			instance = &korifiv1alpha1.CFServiceInstance{
 				ObjectMeta: metav1.ObjectMeta{
@@ -626,6 +628,98 @@ var _ = Describe("CFServiceBinding", func() {
 					},
 				}))
 			}).Should(Succeed())
+		})
+
+		When("the binding has parameters", func() {
+			var paramsSecret *corev1.Secret
+
+			BeforeEach(func() {
+				paramsSecret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: binding.Namespace,
+						Name:      uuid.NewString(),
+					},
+					Data: map[string][]byte{
+						tools.ParametersSecretKey: []byte(`{"p1":"p1-value"}`),
+					},
+				}
+				Expect(adminClient.Create(ctx, paramsSecret)).To(Succeed())
+
+				Expect(k8s.Patch(ctx, adminClient, binding, func() {
+					binding.Spec.Parameters.Name = paramsSecret.Name
+				})).To(Succeed())
+			})
+
+			It("sends them to the broker", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(brokerClient.BindCallCount()).To(BeNumerically(">", 0))
+					_, payload := brokerClient.BindArgsForCall(0)
+					g.Expect(payload.Parameters).To(Equal(map[string]any{
+						"p1": "p1-value",
+					}))
+				}).Should(Succeed())
+			})
+
+			When("the parameters secret does not exist", func() {
+				BeforeEach(func() {
+					Expect(k8s.PatchResource(ctx, adminClient, binding, func() {
+						binding.Spec.Parameters.Name = "not-valid"
+					})).To(Succeed())
+				})
+
+				It("sets the ready condition to false", func() {
+					Eventually(func(g Gomega) {
+						g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+						g.Expect(binding.Status.Conditions).To(ContainElement(SatisfyAll(
+							HasType(Equal(korifiv1alpha1.StatusConditionReady)),
+							HasStatus(Equal(metav1.ConditionFalse)),
+							HasReason(Equal("InvalidParameters")),
+						)))
+					}).Should(Succeed())
+				})
+			})
+
+			When("the parameters secret data is missing the parameters key", func() {
+				BeforeEach(func() {
+					Expect(k8s.PatchResource(ctx, adminClient, paramsSecret, func() {
+						paramsSecret.Data = map[string][]byte{
+							"foo": []byte("bar"),
+						}
+					})).To(Succeed())
+				})
+
+				It("sets the ready condition to false", func() {
+					Eventually(func(g Gomega) {
+						g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+						g.Expect(binding.Status.Conditions).To(ContainElement(SatisfyAll(
+							HasType(Equal(korifiv1alpha1.StatusConditionReady)),
+							HasStatus(Equal(metav1.ConditionFalse)),
+							HasReason(Equal("InvalidParameters")),
+						)))
+					}).Should(Succeed())
+				})
+			})
+
+			When("the parameters are invalid", func() {
+				BeforeEach(func() {
+					Expect(k8s.PatchResource(ctx, adminClient, paramsSecret, func() {
+						paramsSecret.Data = map[string][]byte{
+							tools.ParametersSecretKey: []byte("invalid-json"),
+						}
+					})).To(Succeed())
+				})
+
+				It("sets the ready condition to false", func() {
+					Eventually(func(g Gomega) {
+						g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+						g.Expect(binding.Status.Conditions).To(ContainElement(SatisfyAll(
+							HasType(Equal(korifiv1alpha1.StatusConditionReady)),
+							HasStatus(Equal(metav1.ConditionFalse)),
+							HasReason(Equal("InvalidParameters")),
+						)))
+					}).Should(Succeed())
+				})
+			})
 		})
 
 		It("does not check for binding last operation", func() {
@@ -882,12 +976,12 @@ var _ = Describe("CFServiceBinding", func() {
 
 					brokerClient.BindReturns(osbapi.BindResponse{
 						Credentials: map[string]any{
-							"foo": "bar",
+							"foo-async": "bar-async",
 						},
 					}, nil)
 				})
 
-				It("creates the credentials secret", func() {
+				FIt("creates the credentials secret", func() {
 					Eventually(func(g Gomega) {
 						g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
 						g.Expect(binding.Status.Credentials.Name).To(Equal(binding.Name))
@@ -901,7 +995,7 @@ var _ = Describe("CFServiceBinding", func() {
 						g.Expect(adminClient.Get(ctx, client.ObjectKeyFromObject(credentialsSecret), credentialsSecret)).To(Succeed())
 						g.Expect(credentialsSecret.Type).To(BeEquivalentTo("Opaque"))
 						g.Expect(credentialsSecret.Data).To(MatchKeys(IgnoreExtras, Keys{
-							tools.CredentialsSecretKey: BeEquivalentTo(`{"foo":"bar"}`),
+							tools.CredentialsSecretKey: BeEquivalentTo(`{"foo-async":"bar-async"}`),
 						}))
 						g.Expect(credentialsSecret.OwnerReferences).To(ConsistOf(MatchFields(IgnoreExtras, Fields{
 							"Name": Equal(binding.Name),
